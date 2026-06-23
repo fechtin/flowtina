@@ -8,6 +8,15 @@ import re
 _HASHTAG_RE = re.compile(r"#\w+")
 _MULTISPACE_RE = re.compile(r"[ \t]{2,}")
 _MULTINEWLINE_RE = re.compile(r"\n{3,}")
+# Chain-of-thought blocks emitted by reasoning models (Qwen, DeepSeek-R1, ...).
+_REASONING_RE = re.compile(
+    r"<(think|thinking|reasoning)>.*?</\1>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+_OPEN_REASONING_RE = re.compile(
+    r"^\s*<(think|thinking|reasoning)>",
+    flags=re.IGNORECASE,
+)
 _EMOJI_RE = re.compile(
     "[\U0001f300-\U0001faff\U00002600-\U000027bf\U0001f1e6-\U0001f1ff]",
     flags=re.UNICODE,
@@ -18,6 +27,20 @@ def content_hash(text: str) -> str:
     """SHA-256 hash of normalized content for deduplication."""
     normalized = " ".join((text or "").lower().split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def strip_reasoning(text: str) -> str:
+    """Remove chain-of-thought blocks from reasoning models' output.
+
+    Handles closed ``<think>...</think>`` blocks and an unterminated leading
+    ``<think>`` (truncated output, where the whole response is reasoning).
+    """
+    if not text:
+        return text
+    cleaned = _REASONING_RE.sub("", text)
+    if _OPEN_REASONING_RE.match(cleaned):
+        return ""
+    return cleaned.strip()
 
 
 def clean_content(text: str) -> str:

@@ -5,6 +5,7 @@ import type {
   DashboardCharts,
   DashboardStats,
   FacebookPage,
+  FacebookDiscoveredPage,
   Job,
   JobHistory,
   Keyword,
@@ -110,7 +111,14 @@ export const postService = {
   ) => http.get<unknown, Post[]>(`/projects/${pid}/posts`, { params }),
   create: (
     pid: string,
-    payload: { title?: string; content: string; hashtags?: string; language: string; status: PostStatus },
+    payload: {
+      title?: string
+      content: string
+      hashtags?: string
+      language: string
+      status: PostStatus
+      image_url?: string | null
+    },
   ) => http.post<unknown, Post>(`/projects/${pid}/posts`, payload),
   generate: (
     pid: string,
@@ -127,6 +135,15 @@ export const postService = {
     http.post<unknown, Post>(`/posts/${id}/retry`, null, {
       params: pageId ? { page_id: pageId } : {},
     }),
+  uploadImage: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    // Axios 1.x appends the multipart boundary automatically for FormData.
+    return http.post<unknown, Post>(`/posts/${id}/image`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  removeImage: (id: string) => http.delete<unknown, Post>(`/posts/${id}/image`),
 }
 
 // ---------- Jobs ----------
@@ -160,8 +177,15 @@ export const facebookService = {
   addPage: (pid: string, payload: { page_name: string; page_id: string; access_token: string }) =>
     http.post<unknown, FacebookPage>(`/projects/${pid}/facebook/pages`, payload),
   removePage: (id: string) => http.delete<unknown, void>(`/facebook/pages/${id}`),
-  importPages: (pid: string, token?: string) =>
-    http.post<unknown, FacebookPage[]>(`/projects/${pid}/facebook/import`, { token: token || null }),
+  discoverPages: (pid: string, token?: string) =>
+    http.post<unknown, FacebookDiscoveredPage[]>(`/projects/${pid}/facebook/discover`, {
+      token: token || null,
+    }),
+  importPages: (pid: string, token?: string, pageIds?: string[]) =>
+    http.post<unknown, FacebookPage[]>(`/projects/${pid}/facebook/import`, {
+      token: token || null,
+      page_ids: pageIds ?? null,
+    }),
 }
 
 // ---------- Telegram ----------

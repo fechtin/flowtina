@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Facebook, DownloadCloud, ExternalLink } from 'lucide-vue-next'
+import { Plus, Trash2, Facebook, DownloadCloud, ExternalLink, CheckCircle2 } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -13,7 +13,7 @@ import { useCurrentProject } from '@/composables/useCurrentProject'
 import { useAsync } from '@/composables/useAsync'
 import { extractErrorMessage } from '@/services/http'
 import { useToastStore } from '@/stores/toast'
-import type { FacebookPage } from '@/types'
+import type { FacebookPage, FacebookDiscoveredPage } from '@/types'
 
 const { t } = useI18n()
 const toast = useToastStore()
@@ -33,6 +33,13 @@ const deleteId = ref<string | null>(null)
 const form = reactive({ page_name: '', page_id: '', access_token: '' })
 const importToken = ref('')
 const { loading: importing, run: runImport } = useAsync()
+
+// Two-step sync: 'token' collects the token, 'select' lets the operator pick
+// which discovered pages to import (only shown when the token manages >1 page).
+const importStep = ref<'token' | 'select'>('token')
+const discovered = ref<FacebookDiscoveredPage[]>([])
+const selectedIds = reactive<Record<string, boolean>>({})
+const allSelected = computed(() => discovered.value.length > 0 && discovered.value.every((p) => selectedIds[p.page_id]))
 
 async function load() {
   if (!projectId.value) return
@@ -70,14 +77,48 @@ async function save() {
 
 function openImport() {
   importToken.value = ''
+  importStep.value = 'token'
+  discovered.value = []
   showImport.value = true
 }
 
-async function importPages() {
+// Step 1: discover the pages the token can manage. One page (or none to choose
+// from) imports straight away; multiple pages move to the selection step.
+async function discoverPages() {
   if (!projectId.value) return
-  const pages = await runImport(() => facebookService.importPages(projectId.value!, importToken.value.trim()))
-  if (pages !== undefined) {
-    toast.success(t('facebook.imported', { count: Array.isArray(pages) ? pages.length : 0 }))
+  const found = await runImport(() => facebookService.discoverPages(projectId.value!, importToken.value.trim()))
+  if (found === undefined) return
+  if (found.length <= 1) {
+    await doImport(found.map((p) => p.page_id))
+    return
+  }
+  discovered.value = found
+  for (const p of found) selectedIds[p.page_id] = true
+  importStep.value = 'select'
+}
+
+function toggleSelectAll() {
+  const next = !allSelected.value
+  for (const p of discovered.value) selectedIds[p.page_id] = next
+}
+
+// Step 2: import the chosen pages.
+async function importSelected() {
+  const ids = discovered.value.filter((p) => selectedIds[p.page_id]).map((p) => p.page_id)
+  if (!ids.length) {
+    toast.error(t('facebook.selectAtLeastOne'))
+    return
+  }
+  await doImport(ids)
+}
+
+async function doImport(pageIds: string[]) {
+  if (!projectId.value) return
+  const result = await runImport(() =>
+    facebookService.importPages(projectId.value!, importToken.value.trim(), pageIds),
+  )
+  if (result !== undefined) {
+    toast.success(t('facebook.imported', { count: Array.isArray(result) ? result.length : 0 }))
     showImport.value = false
     await load()
   }
@@ -158,8 +199,12 @@ async function doDelete() {
     </BaseModal>
 
     <!-- Import from a single token -->
-    <BaseModal v-model="showImport" :title="t('facebook.importTitle')">
-      <div class="space-y-4">
+    <BaseModal
+      v-model="showImport"
+      :title="importStep === 'select' ? t('facebook.selectTitle') : t('facebook.importTitle')"
+    >
+      <!-- Step 1: token entry -->
+      <div v-if="importStep === 'token'" class="space-y-4">
         <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('facebook.importHint') }}</p>
         <div>
           <label class="label">{{ t('facebook.importToken') }}</label>
@@ -213,9 +258,50 @@ async function doDelete() {
 
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" class="btn-secondary" @click="showImport = false">{{ t('common.cancel') }}</button>
-          <button type="button" class="btn-primary" :disabled="importing" @click="importPages">
+          <button type="button" class="btn-primary" :disabled="importing" @click="discoverPages">
             <DownloadCloud class="h-4 w-4" />
             {{ importing ? t('common.loading') : importLabel }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: choose which pages to import -->
+      <div v-else class="space-y-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('facebook.selectHint') }}</p>
+
+        <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          <input type="checkbox" class="h-4 w-4" :checked="allSelected" @change="toggleSelectAll" />
+          {{ t('facebook.selectAll') }}
+        </label>
+
+        <div class="max-h-72 space-y-2 overflow-y-auto">
+          <label
+            v-for="p in discovered"
+            :key="p.page_id"
+            class="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+          >
+            <input v-model="selectedIds[p.page_id]" type="checkbox" class="h-4 w-4" />
+            <div class="rounded-lg bg-blue-50 p-2 text-blue-600 dark:bg-blue-950 dark:text-blue-300">
+              <Facebook class="h-4 w-4" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-medium text-gray-900 dark:text-white">{{ p.page_name }}</p>
+              <p class="truncate text-xs text-gray-400">{{ p.page_id }}</p>
+            </div>
+            <span
+              v-if="p.already_connected"
+              class="inline-flex items-center gap-1 whitespace-nowrap text-xs text-green-600 dark:text-green-400"
+            >
+              <CheckCircle2 class="h-3.5 w-3.5" /> {{ t('facebook.alreadyConnected') }}
+            </span>
+          </label>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" class="btn-secondary" @click="importStep = 'token'">{{ t('common.back') }}</button>
+          <button type="button" class="btn-primary" :disabled="importing" @click="importSelected">
+            <DownloadCloud class="h-4 w-4" />
+            {{ importing ? t('common.loading') : t('facebook.importSelected') }}
           </button>
         </div>
       </div>

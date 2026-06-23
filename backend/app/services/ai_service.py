@@ -20,6 +20,7 @@ from app.schemas.project import (
     ProviderTestResult,
 )
 from app.utils.retry import retry_async
+from app.utils.text import strip_reasoning
 
 log = get_logger("ai")
 
@@ -67,6 +68,7 @@ class AIService:
                     ),
                 )
                 duration_ms = int((time.perf_counter() - start) * 1000)
+                result.text = strip_reasoning(result.text)
                 self._log_usage(project_id, config.provider, result, duration_ms)
                 self.db.commit()
                 return result
@@ -126,7 +128,8 @@ class AIService:
         try:
             result = await client.generate(payload.prompt)
             latency = int((time.perf_counter() - start) * 1000)
-            return ProviderTestResult(success=True, latency_ms=latency, output=result.text[:200])
+            output = strip_reasoning(result.text)
+            return ProviderTestResult(success=True, latency_ms=latency, output=output[:200])
         except Exception as exc:  # noqa: BLE001 - surface as failed test
             latency = int((time.perf_counter() - start) * 1000)
             return ProviderTestResult(success=False, latency_ms=latency, error=str(exc))

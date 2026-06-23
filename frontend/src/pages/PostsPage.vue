@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Sparkles, Pencil, Trash2, Send, RefreshCw, Bot, Eye } from 'lucide-vue-next'
+import {
+  Plus,
+  Sparkles,
+  Pencil,
+  Trash2,
+  Send,
+  RefreshCw,
+  Bot,
+  Eye,
+  Image as ImageIcon,
+  Upload,
+  X,
+} from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -48,7 +60,12 @@ const form = reactive({
   hashtags: '',
   language: 'en',
   status: 'draft' as PostStatus,
+  image_url: '',
 })
+
+// Image upload (edit mode only — needs an existing post id)
+const imageInput = ref<HTMLInputElement | null>(null)
+const uploadingImage = ref(false)
 
 // Generate modal
 const showGenerate = ref(false)
@@ -103,6 +120,7 @@ function openCreate() {
   form.hashtags = ''
   form.language = 'en'
   form.status = 'draft'
+  form.image_url = ''
   showForm.value = true
 }
 
@@ -122,6 +140,7 @@ function openEdit(p: Post) {
   form.hashtags = hashtagList(p.hashtags).join(', ')
   form.language = p.language
   form.status = p.status
+  form.image_url = p.image_url ?? ''
   showForm.value = true
 }
 
@@ -129,6 +148,9 @@ async function save() {
   if (!projectId.value) return
   const pid = projectId.value
   const hashtags = hashtagList(form.hashtags).join(' ')
+  // A blank field maps to null; the backend ignores null on update, so the URL
+  // is cleared via the explicit remove control rather than an emptied field.
+  const imageUrl = form.image_url.trim() || null
   const action = editing.value
     ? () =>
         postService.update(editing.value!.id, {
@@ -137,6 +159,7 @@ async function save() {
           hashtags,
           language: form.language,
           status: form.status,
+          image_url: imageUrl,
         })
     : () =>
         postService.create(pid, {
@@ -145,11 +168,45 @@ async function save() {
           hashtags,
           language: form.language,
           status: form.status,
+          image_url: imageUrl,
         })
   const ok = await run(action, { successMessage: t('common.saved') })
   if (ok !== undefined) {
     showForm.value = false
     await load()
+  }
+}
+
+// ---------- Image ----------
+async function onImagePicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !editing.value) return
+  uploadingImage.value = true
+  try {
+    const updated = await postService.uploadImage(editing.value.id, file)
+    editing.value = updated
+    form.image_url = updated.image_url ?? ''
+    toast.success(t('posts.imageUploaded'))
+    await load()
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    uploadingImage.value = false
+    input.value = ''
+  }
+}
+
+async function removeAttachedImage() {
+  if (!editing.value) return
+  try {
+    const updated = await postService.removeImage(editing.value.id)
+    editing.value = updated
+    form.image_url = ''
+    toast.success(t('posts.imageRemoved'))
+    await load()
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
   }
 }
 
@@ -278,6 +335,19 @@ watch(projectId, () => {
             {{ truncate(p.content, 200) }}
           </p>
 
+          <img
+            v-if="p.image_url"
+            :src="p.image_url"
+            alt=""
+            class="mt-3 max-h-40 w-full rounded-lg border border-gray-200 object-cover dark:border-gray-700"
+          />
+          <span
+            v-else-if="p.has_uploaded_image"
+            class="badge mt-3 inline-flex w-fit items-center gap-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+          >
+            <ImageIcon class="h-3 w-3" /> {{ t('posts.imageAttached') }}
+          </span>
+
           <div v-if="hashtagList(p.hashtags).length" class="mt-3 flex flex-wrap gap-1">
             <span
               v-for="tag in hashtagList(p.hashtags)"
@@ -340,6 +410,18 @@ watch(projectId, () => {
             <Bot class="h-3 w-3" /> {{ t('posts.aiGenerated') }}
           </span>
         </div>
+        <img
+          v-if="previewing.image_url"
+          :src="previewing.image_url"
+          alt=""
+          class="max-h-72 w-full rounded-lg border border-gray-200 object-contain dark:border-gray-700"
+        />
+        <span
+          v-else-if="previewing.has_uploaded_image"
+          class="badge inline-flex w-fit items-center gap-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+        >
+          <ImageIcon class="h-3 w-3" /> {{ t('posts.imageAttached') }}
+        </span>
         <p class="max-h-[55vh] overflow-y-auto whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-200">
           {{ previewing.content }}
         </p>
@@ -376,6 +458,59 @@ watch(projectId, () => {
           <label class="label">{{ t('posts.hashtags') }}</label>
           <input v-model="form.hashtags" class="input" placeholder="#ai, #content" />
         </div>
+
+        <!-- Image: URL (any post) or uploaded file (existing posts only) -->
+        <div class="space-y-2">
+          <label class="label flex items-center gap-1.5">
+            <ImageIcon class="h-4 w-4" /> {{ t('posts.image') }}
+          </label>
+
+          <template v-if="editing?.has_uploaded_image">
+            <div
+              class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800/50"
+            >
+              <span class="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                <ImageIcon class="h-4 w-4" /> {{ t('posts.imageAttached') }}
+              </span>
+              <button type="button" class="btn-ghost text-red-600" @click="removeAttachedImage">
+                <X class="h-4 w-4" /> {{ t('posts.removeImage') }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <input
+              v-model="form.image_url"
+              class="input"
+              placeholder="https://example.com/image.jpg"
+            />
+            <p class="text-xs text-gray-400">{{ t('posts.imageUrlHint') }}</p>
+
+            <div v-if="form.image_url" class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+              <img :src="form.image_url" alt="" class="max-h-48 w-full object-cover" />
+            </div>
+
+            <div v-if="editing" class="flex items-center gap-2 pt-1">
+              <input
+                ref="imageInput"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                class="hidden"
+                @change="onImagePicked"
+              />
+              <button
+                type="button"
+                class="btn-secondary text-sm"
+                :disabled="uploadingImage"
+                @click="imageInput?.click()"
+              >
+                <Upload class="h-4 w-4" /> {{ t('posts.uploadImage') }}
+              </button>
+            </div>
+            <p v-else class="text-xs text-gray-400">{{ t('posts.uploadAfterCreate') }}</p>
+          </template>
+        </div>
+
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label">{{ t('common.language') }}</label>

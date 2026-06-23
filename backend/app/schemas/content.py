@@ -6,7 +6,7 @@ from datetime import datetime
 
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from app.schemas.common import TimestampedSchema
 
@@ -57,6 +57,7 @@ class PostCreate(BaseModel):
     hashtags: str | None = None
     language: str = "en"
     status: str = "draft"
+    image_url: str | None = Field(default=None, max_length=1000)
 
 
 class PostUpdate(BaseModel):
@@ -66,6 +67,7 @@ class PostUpdate(BaseModel):
     language: str | None = None
     status: str | None = None
     publish_at: datetime | None = None
+    image_url: str | None = Field(default=None, max_length=1000)
 
 
 class PostOut(TimestampedSchema):
@@ -82,6 +84,15 @@ class PostOut(TimestampedSchema):
     version: int
     error_message: str | None = None
     facebook_page_id: str | None = None
+    image_url: str | None = None
+    # Internal local path of an uploaded binary image; never serialised.
+    image_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_uploaded_image(self) -> bool:
+        """True when a binary image was uploaded and is awaiting publish."""
+        return bool(self.image_path)
 
 
 class GenerateRequest(BaseModel):
@@ -175,6 +186,15 @@ class FacebookImportRequest(BaseModel):
     # Optional: a System User / long-lived token. If omitted, the server's
     # configured FACEBOOK_SYSTEM_TOKEN is used.
     token: str | None = None
+    # Optional: only connect these page IDs. If omitted, every discovered page
+    # is connected (and stale ones pruned) — the legacy "import all" behaviour.
+    page_ids: list[str] | None = None
+
+
+class FacebookDiscoveredPage(BaseModel):
+    page_id: str
+    page_name: str
+    already_connected: bool
 
 
 # --- Telegram ---

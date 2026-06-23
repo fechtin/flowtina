@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     )
     http_fetch_timeout_seconds: int = 30
 
+    # --- Media uploads (post images) ---
+    # Directory for temporarily-stored uploaded post images. Files live here
+    # only between upload and a successful Facebook publish, then are removed.
+    upload_dir: str = str(BASE_DIR / "uploads")
+    # Maximum accepted upload size in bytes (default 10 MiB).
+    upload_max_bytes: int = 10 * 1024 * 1024
+
     # --- Pipeline / providers ---
     provider_timeout_seconds: int = 60
     provider_max_retries: int = 3

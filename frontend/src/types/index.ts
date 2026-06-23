@@ -153,6 +153,8 @@ export interface Post {
   created_by_ai: boolean
   version: number
   error_message?: string | null
+  image_url?: string | null
+  has_uploaded_image?: boolean
   created_at: string
   updated_at: string
 }
@@ -190,6 +192,12 @@ export interface FacebookPage {
   page_name: string
   page_id: string
   access_token?: string
+}
+
+export interface FacebookDiscoveredPage {
+  page_id: string
+  page_name: string
+  already_connected: boolean
 }
 
 export interface TelegramConfig {

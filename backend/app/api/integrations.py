@@ -11,6 +11,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.common import ok
 from app.schemas.content import (
+    FacebookDiscoveredPage,
     FacebookImportRequest,
     FacebookPageCreate,
     FacebookPageOut,
@@ -43,6 +44,20 @@ def connect_page(
     return ok(FacebookPageOut.model_validate(page).model_dump(), "Page connected")
 
 
+@router.post("/projects/{project_id}/facebook/discover")
+async def discover_pages(
+    payload: FacebookImportRequest,
+    project: Project = Depends(get_owned_project),
+    db: Session = Depends(get_db),
+):
+    """List the Pages a token can manage so the operator can pick which to import."""
+    pages = await FacebookService(db).discover_pages(project.id, payload.token)
+    return ok(
+        [FacebookDiscoveredPage.model_validate(p).model_dump() for p in pages],
+        f"Found {len(pages)} page(s)",
+    )
+
+
 @router.post("/projects/{project_id}/facebook/import")
 async def import_pages(
     payload: FacebookImportRequest,
@@ -50,7 +65,7 @@ async def import_pages(
     db: Session = Depends(get_db),
 ):
     """Auto-discover and connect the operator's Pages from a single token."""
-    pages = await FacebookService(db).import_pages(project.id, payload.token)
+    pages = await FacebookService(db).import_pages(project.id, payload.token, payload.page_ids)
     return ok(
         [FacebookPageOut.model_validate(p).model_dump() for p in pages],
         f"Imported {len(pages)} page(s)",
