@@ -236,9 +236,9 @@ export default {
   telegram: {
     title: 'Telegram',
     botToken: 'Token bot',
-    botTokenHint: 'Tạo bot bằng @BotFather trên Telegram rồi dán token vào đây (ví dụ: 123456789:ABCdef...).',
+    botTokenHint: "Tạo bot bằng {'@'}BotFather trên Telegram rồi dán token vào đây (ví dụ: 123456789:ABCdef...).",
     chatId: 'ID trò chuyện',
-    chatIdHint: 'ID dạng số của cuộc trò chuyện sẽ nhận tin nhắn — không phải email. Nhắn @userinfobot để lấy ID cá nhân, hoặc thêm bot vào nhóm và dùng @getidsbot. ID nhóm bắt đầu bằng dấu -.',
+    chatIdHint: "ID dạng số của cuộc trò chuyện sẽ nhận tin nhắn — không phải email. Nhắn {'@'}userinfobot để lấy ID cá nhân, hoặc thêm bot vào nhóm và dùng {'@'}getidsbot. ID nhóm bắt đầu bằng dấu -.",
     botTokenInvalid: 'Token bot phải có dạng 123456789:ABCdef... (dãy số, dấu hai chấm, rồi tới phần bí mật).',
     chatIdInvalid: 'Chat ID phải là số (ví dụ 123456789 hoặc -100123456789), không phải email.',
     sendTest: 'Gửi tin nhắn thử',

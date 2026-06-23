@@ -236,9 +236,9 @@ export default {
   telegram: {
     title: 'Telegram',
     botToken: 'Bot token',
-    botTokenHint: 'Create a bot with @BotFather on Telegram and paste the token here (e.g. 123456789:ABCdef...).',
+    botTokenHint: "Create a bot with {'@'}BotFather on Telegram and paste the token here (e.g. 123456789:ABCdef...).",
     chatId: 'Chat ID',
-    chatIdHint: 'Numeric ID of the chat to receive messages — not an email. Message @userinfobot to get your personal ID, or add the bot to a group and use @getidsbot. Group IDs start with -.',
+    chatIdHint: "Numeric ID of the chat to receive messages — not an email. Message {'@'}userinfobot to get your personal ID, or add the bot to a group and use {'@'}getidsbot. Group IDs start with -.",
     botTokenInvalid: 'Bot token must look like 123456789:ABCdef... (digits, a colon, then the secret).',
     chatIdInvalid: 'Chat ID must be a number (e.g. 123456789 or -100123456789), not an email.',
     sendTest: 'Send test message',
