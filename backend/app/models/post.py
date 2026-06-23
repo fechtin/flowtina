@@ -26,6 +26,8 @@ class Post(Base, BaseModelMixin):
     created_by_ai: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Target Facebook page recorded when a post is queued for (auto) publishing.
+    facebook_page_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class PostVersion(Base, BaseModelMixin):
@@ -46,6 +48,14 @@ class SchedulerJob(Base, BaseModelMixin):
     interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Content generation options.
+    content_type: Mapped[str] = mapped_column(String(32), default="short_post", nullable=False)
+    language: Mapped[str] = mapped_column(String(8), default="en", nullable=False)
+    # Auto-publish: when enabled, generated posts are published to facebook_page_id.
+    auto_publish: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # When require_approval is set, posts wait for Telegram approval before publishing.
+    require_approval: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    facebook_page_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import NotFoundException, ValidationException
 from app.models.post import SchedulerJob
-from app.repositories.repositories import SchedulerHistoryRepository, SchedulerJobRepository
+from app.repositories.repositories import (
+    FacebookPageRepository,
+    SchedulerHistoryRepository,
+    SchedulerJobRepository,
+)
 from app.schemas.content import JobCreate, JobUpdate
 from app.scheduler.manager import scheduler_manager
 
@@ -16,6 +20,15 @@ class SchedulerService:
         self.db = db
         self.jobs = SchedulerJobRepository(db)
         self.history = SchedulerHistoryRepository(db)
+        self.pages = FacebookPageRepository(db)
+
+    def _validate_page(self, project_id: str, page_id: str | None) -> None:
+        """Ensure a chosen Facebook page exists and belongs to the project."""
+        if not page_id:
+            return
+        page = self.pages.get(page_id)
+        if not page or page.project_id != project_id:
+            raise ValidationException("Selected Facebook page does not belong to this project")
 
     def list(self, project_id: str) -> list[SchedulerJob]:
         return self.jobs.list(project_id=project_id)
@@ -27,6 +40,7 @@ class SchedulerService:
         return job
 
     def create(self, project_id: str, payload: JobCreate) -> SchedulerJob:
+        self._validate_page(project_id, payload.facebook_page_id)
         job = self.jobs.create(project_id=project_id, **payload.model_dump())
         self.db.commit()
         self.db.refresh(job)
@@ -35,6 +49,7 @@ class SchedulerService:
 
     def update(self, job_id: str, payload: JobUpdate) -> SchedulerJob:
         job = self.get(job_id)
+        self._validate_page(job.project_id, payload.facebook_page_id)
         self.jobs.update(job, **payload.model_dump(exclude_none=True))
         self.db.commit()
         self.db.refresh(job)

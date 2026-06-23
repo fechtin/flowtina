@@ -14,6 +14,7 @@ from app.models.post import Post
 from app.prompts.defaults import DEFAULT_HASHTAG_PROMPT, DEFAULT_SUMMARIZE_PROMPT, DEFAULT_TEMPLATES
 from app.prompts.engine import prompt_engine
 from app.repositories.repositories import (
+    FacebookPageRepository,
     PromptTemplateRepository,
     SystemPromptRepository,
     PostRepository,
@@ -44,8 +45,17 @@ class ContentService:
         content_type: str = "short_post",
         language: str = "en",
         max_posts: int = 1,
+        auto_publish: bool = False,
+        require_approval: bool = False,
+        target_page_id: str | None = None,
     ) -> list[Post]:
-        """Run the pipeline and persist draft posts. Returns created posts."""
+        """Run the pipeline and persist posts.
+
+        When ``auto_publish`` is set, each generated post is either published to
+        ``target_page_id`` immediately or — if ``require_approval`` is set — held
+        as ``pending_approval`` and sent to Telegram for an approve/reject
+        decision. Returns the created posts.
+        """
         documents: list[SourceDocument] = []
         if topic:
             documents = [SourceDocument(title=topic, content="", source="manual")]
@@ -59,8 +69,46 @@ class ContentService:
         for doc in documents[:max_posts]:
             post = await self._generate_one(project_id, doc, content_type, language)
             if post:
+                await self._dispatch(post, auto_publish, require_approval, target_page_id)
                 created.append(post)
         return created
+
+    async def _dispatch(
+        self, post: Post, auto_publish: bool, require_approval: bool, target_page_id: str | None
+    ) -> None:
+        """Publish or queue a freshly generated post for approval."""
+        if not auto_publish:
+            return
+        if not target_page_id:
+            log.warning(f"auto_publish requested but no target page for post {post.id}; left as draft")
+            return
+        post.facebook_page_id = target_page_id
+        if require_approval:
+            post.status = "pending_approval"
+            self.db.commit()
+            await self._request_approval(post, target_page_id)
+        else:
+            await self._publish(post, target_page_id)
+
+    async def _publish(self, post: Post, page_id: str) -> None:
+        from app.services.facebook_service import FacebookService
+
+        try:
+            await FacebookService(self.db).publish(post.id, page_id)
+            log.info(f"Auto-published post {post.id} to page {page_id}")
+        except Exception as exc:  # noqa: BLE001 - FacebookService records the failure
+            log.error(f"Auto-publish failed for post {post.id}: {exc}")
+
+    async def _request_approval(self, post: Post, page_id: str) -> None:
+        from app.services.telegram_service import TelegramService
+
+        page = FacebookPageRepository(self.db).get(page_id)
+        page_name = page.page_name if page else page_id
+        try:
+            await TelegramService(self.db).send_approval_request(post.project_id, post, page_name)
+            log.info(f"Approval request sent for post {post.id}")
+        except Exception as exc:  # noqa: BLE001 - approval requests are best-effort
+            log.error(f"Could not send approval request for post {post.id}: {exc}")
 
     async def _generate_one(
         self, project_id: str, doc: SourceDocument, content_type: str, language: str

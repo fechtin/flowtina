@@ -139,6 +139,11 @@ export const jobService = {
       interval_seconds?: number
       timezone: string
       enabled: boolean
+      content_type?: string
+      language?: string
+      auto_publish?: boolean
+      require_approval?: boolean
+      facebook_page_id?: string | null
     },
   ) => http.post<unknown, Job>(`/projects/${pid}/jobs`, payload),
   update: (id: string, payload: Partial<Job>) => http.put<unknown, Job>(`/jobs/${id}`, payload),
@@ -153,6 +158,8 @@ export const facebookService = {
   addPage: (pid: string, payload: { page_name: string; page_id: string; access_token: string }) =>
     http.post<unknown, FacebookPage>(`/projects/${pid}/facebook/pages`, payload),
   removePage: (id: string) => http.delete<unknown, void>(`/facebook/pages/${id}`),
+  importPages: (pid: string, token?: string) =>
+    http.post<unknown, FacebookPage[]>(`/projects/${pid}/facebook/import`, { token: token || null }),
 }
 
 // ---------- Telegram ----------

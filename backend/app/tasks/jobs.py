@@ -38,7 +38,14 @@ def run_generate_content(job_id: str) -> None:
         if not job:
             raise ValueError(f"Job {job_id} not found")
         posts = _run_async(
-            ContentService(db).generate_for_project(job.project_id, content_type="short_post")
+            ContentService(db).generate_for_project(
+                job.project_id,
+                content_type=job.content_type,
+                language=job.language,
+                auto_publish=job.auto_publish,
+                require_approval=job.require_approval,
+                target_page_id=job.facebook_page_id,
+            )
         )
         job.last_run_at = started
         history.status = "completed"

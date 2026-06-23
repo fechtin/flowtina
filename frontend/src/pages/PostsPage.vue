@@ -23,7 +23,7 @@ const toast = useToastStore()
 const { projectId, hasProject } = useCurrentProject()
 const { loading: mutating, run } = useAsync()
 
-const STATUS_TABS: PostStatus[] = ['draft', 'scheduled', 'published', 'failed']
+const STATUS_TABS: PostStatus[] = ['draft', 'pending_approval', 'scheduled', 'published', 'failed']
 
 const activeStatus = ref<PostStatus>('draft')
 const loading = ref(false)

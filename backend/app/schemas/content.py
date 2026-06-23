@@ -79,6 +79,7 @@ class PostOut(TimestampedSchema):
     created_by_ai: bool
     version: int
     error_message: str | None = None
+    facebook_page_id: str | None = None
 
 
 class GenerateRequest(BaseModel):
@@ -86,6 +87,8 @@ class GenerateRequest(BaseModel):
     content_type: str = "short_post"
     language: str = "en"
     auto_publish: bool = False
+    require_approval: bool = False
+    facebook_page_id: str | None = None
 
 
 # --- Scheduler ---
@@ -98,6 +101,11 @@ class JobCreate(BaseModel):
     interval_seconds: int | None = None
     timezone: str = "UTC"
     enabled: bool = True
+    content_type: str = "short_post"
+    language: str = "en"
+    auto_publish: bool = False
+    require_approval: bool = False
+    facebook_page_id: str | None = None
 
 
 class JobUpdate(BaseModel):
@@ -106,6 +114,11 @@ class JobUpdate(BaseModel):
     interval_seconds: int | None = None
     timezone: str | None = None
     enabled: bool | None = None
+    content_type: str | None = None
+    language: str | None = None
+    auto_publish: bool | None = None
+    require_approval: bool | None = None
+    facebook_page_id: str | None = None
 
 
 class JobOut(TimestampedSchema):
@@ -116,6 +129,11 @@ class JobOut(TimestampedSchema):
     interval_seconds: int | None = None
     timezone: str
     enabled: bool
+    content_type: str
+    language: str
+    auto_publish: bool
+    require_approval: bool
+    facebook_page_id: str | None = None
     last_run_at: datetime | None = None
     next_run_at: datetime | None = None
 
@@ -149,6 +167,12 @@ class FacebookPageOut(TimestampedSchema):
 class FacebookPublishRequest(BaseModel):
     post_id: str
     page_id: str
+
+
+class FacebookImportRequest(BaseModel):
+    # Optional: a System User / long-lived token. If omitted, the server's
+    # configured FACEBOOK_SYSTEM_TOKEN is used.
+    token: str | None = None
 
 
 # --- Telegram ---

@@ -57,6 +57,22 @@ class Settings(BaseSettings):
     scheduler_max_threads: int = 2
     scheduler_enabled: bool = True
 
+    # --- Public URL & Telegram webhook ---
+    # Public HTTPS base URL of the deployment, e.g. https://example.com
+    # Used to register the Telegram webhook for approval callbacks.
+    public_base_url: str = ""
+    # Shared secret sent by Telegram in the X-Telegram-Bot-Api-Secret-Token header.
+    telegram_webhook_secret: str = ""
+
+    # --- Facebook (self-host minimal setup) ---
+    # A System User / long-lived token used to auto-discover the operator's own
+    # Pages, so users don't paste per-page tokens. Optional.
+    facebook_system_token: str = ""
+    # Optional app credentials: when set, a short-lived user token is exchanged
+    # for a long-lived one before discovering Pages.
+    facebook_app_id: str = ""
+    facebook_app_secret: str = ""
+
     # --- Rate limiting (requests / minute) ---
     rate_limit_anonymous: int = 30
     rate_limit_authenticated: int = 300

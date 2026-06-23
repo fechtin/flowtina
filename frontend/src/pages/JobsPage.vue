@@ -11,13 +11,15 @@ import DataTable from '@/components/ui/DataTable.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import NoProjectNotice from '@/components/ui/NoProjectNotice.vue'
-import { jobService } from '@/services'
+import { jobService, facebookService } from '@/services'
 import { useCurrentProject } from '@/composables/useCurrentProject'
 import { useAsync } from '@/composables/useAsync'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/services/http'
 import { formatDate } from '@/utils/format'
-import type { Job, JobHistory } from '@/types'
+import type { Job, JobHistory, FacebookPage } from '@/types'
+
+const CONTENT_TYPES = ['short_post', 'long_post', 'news', 'seo', 'marketing', 'educational', 'question', 'quote']
 
 const { t } = useI18n()
 const toast = useToastStore()
@@ -26,6 +28,7 @@ const { loading: mutating, run } = useAsync()
 
 const loading = ref(false)
 const jobs = ref<Job[]>([])
+const pages = ref<FacebookPage[]>([])
 
 const showForm = ref(false)
 const showConfirm = ref(false)
@@ -38,12 +41,17 @@ const historyRows = ref<JobHistory[]>([])
 type ScheduleMode = 'cron' | 'interval'
 const form = reactive({
   name: '',
-  job_type: '',
+  job_type: 'generate_content',
   mode: 'cron' as ScheduleMode,
   cron_expression: '',
   interval_seconds: 3600,
   timezone: 'UTC',
   enabled: true,
+  content_type: 'short_post',
+  language: 'en',
+  auto_publish: false,
+  require_approval: false,
+  facebook_page_id: '' as string,
 })
 
 const columns = [
@@ -61,6 +69,7 @@ async function load() {
   loading.value = true
   try {
     jobs.value = await jobService.list(projectId.value)
+    pages.value = await facebookService.listPages(projectId.value).catch(() => [])
   } catch (err) {
     toast.error(extractErrorMessage(err))
   } finally {
@@ -74,12 +83,17 @@ watch(projectId, load)
 function openCreate() {
   editing.value = null
   form.name = ''
-  form.job_type = ''
+  form.job_type = 'generate_content'
   form.mode = 'cron'
   form.cron_expression = ''
   form.interval_seconds = 3600
   form.timezone = 'UTC'
   form.enabled = true
+  form.content_type = 'short_post'
+  form.language = 'en'
+  form.auto_publish = false
+  form.require_approval = false
+  form.facebook_page_id = ''
   showForm.value = true
 }
 
@@ -92,17 +106,31 @@ function openEdit(job: Job) {
   form.interval_seconds = job.interval_seconds ?? 3600
   form.timezone = job.timezone || 'UTC'
   form.enabled = job.enabled
+  form.content_type = job.content_type || 'short_post'
+  form.language = job.language || 'en'
+  form.auto_publish = job.auto_publish
+  form.require_approval = job.require_approval
+  form.facebook_page_id = job.facebook_page_id ?? ''
   showForm.value = true
 }
 
 async function save() {
   if (!projectId.value) return
   const pid = projectId.value
+  if (form.auto_publish && !form.facebook_page_id) {
+    toast.error(t('jobs.selectPageRequired'))
+    return
+  }
   const payload = {
     name: form.name,
     job_type: form.job_type,
     timezone: form.timezone || 'UTC',
     enabled: form.enabled,
+    content_type: form.content_type,
+    language: form.language,
+    auto_publish: form.auto_publish,
+    require_approval: form.auto_publish ? form.require_approval : false,
+    facebook_page_id: form.auto_publish ? form.facebook_page_id || null : null,
     ...(form.mode === 'cron'
       ? { cron_expression: form.cron_expression }
       : { interval_seconds: form.interval_seconds }),
@@ -237,6 +265,47 @@ async function doDelete() {
           <label class="label">{{ t('jobs.timezone') }}</label>
           <input v-model="form.timezone" class="input" />
         </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">{{ t('jobs.contentType') }}</label>
+            <select v-model="form.content_type" class="input">
+              <option v-for="ct in CONTENT_TYPES" :key="ct" :value="ct">{{ ct }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">{{ t('jobs.language') }}</label>
+            <select v-model="form.language" class="input">
+              <option value="en">English</option>
+              <option value="vi">Tiếng Việt</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <div class="flex items-center gap-3">
+            <ToggleSwitch v-model="form.auto_publish" />
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('jobs.autoPublish') }}</span>
+          </div>
+          <p class="mt-1 text-xs text-gray-500">{{ t('jobs.autoPublishHint') }}</p>
+
+          <div v-if="form.auto_publish" class="mt-3 space-y-3">
+            <div>
+              <label class="label">{{ t('jobs.facebookPage') }}</label>
+              <select v-model="form.facebook_page_id" class="input" required>
+                <option value="" disabled>{{ t('jobs.selectPage') }}</option>
+                <option v-for="p in pages" :key="p.id" :value="p.id">{{ p.page_name }}</option>
+              </select>
+              <p v-if="!pages.length" class="mt-1 text-xs text-amber-600">{{ t('jobs.noPages') }}</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <ToggleSwitch v-model="form.require_approval" />
+              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('jobs.requireApproval') }}</span>
+            </div>
+            <p class="text-xs text-gray-500">{{ t('jobs.requireApprovalHint') }}</p>
+          </div>
+        </div>
+
         <div class="flex items-center gap-3">
           <ToggleSwitch v-model="form.enabled" />
           <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('common.enabled') }}</span>

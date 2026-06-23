@@ -53,6 +53,9 @@ async def generate_post(
         topic=payload.topic,
         content_type=payload.content_type,
         language=payload.language,
+        auto_publish=payload.auto_publish,
+        require_approval=payload.require_approval,
+        target_page_id=payload.facebook_page_id,
     )
     return ok([PostOut.model_validate(p).model_dump() for p in posts], f"Generated {len(posts)} post(s)")
 

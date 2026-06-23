@@ -128,7 +128,13 @@ export interface Keyword {
   priority: number
 }
 
-export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed' | 'archived'
+export type PostStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'scheduled'
+  | 'published'
+  | 'failed'
+  | 'archived'
 
 export interface Post {
   id: string
@@ -157,6 +163,11 @@ export interface Job {
   interval_seconds?: number | null
   timezone: string
   enabled: boolean
+  content_type: string
+  language: string
+  auto_publish: boolean
+  require_approval: boolean
+  facebook_page_id?: string | null
   last_run_at?: string | null
   next_run_at?: string | null
 }

@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 
 import httpx
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.exceptions import NotFoundException, TelegramException
 from app.core.logger import get_logger
 from app.core.security import decrypt_secret, encrypt_secret
 from app.models.integration import TelegramConfig
-from app.repositories.repositories import TelegramConfigRepository, TelegramLogRepository
+from app.models.post import Post
+from app.repositories.repositories import (
+    PostRepository,
+    TelegramConfigRepository,
+    TelegramLogRepository,
+)
 from app.schemas.content import TelegramConfigIn
 from app.utils.retry import retry_async
 
@@ -55,11 +62,141 @@ class TelegramService:
             project_id, decrypt_secret(config.bot_token_encrypted), config.chat_id, message, type_
         )
 
+    @staticmethod
+    def webhook_secret() -> str:
+        """Shared secret Telegram echoes in X-Telegram-Bot-Api-Secret-Token."""
+        if settings.telegram_webhook_secret:
+            return settings.telegram_webhook_secret
+        return hashlib.sha256(f"tg-webhook:{settings.jwt_secret}".encode()).hexdigest()[:48]
+
+    async def set_webhook(self, project_id: str) -> bool:
+        """Register the approval webhook with Telegram for this project's bot."""
+        config = self.configs.get_for_project(project_id)
+        if not config:
+            raise NotFoundException("Telegram is not configured for this project")
+        if not settings.public_base_url:
+            log.warning("public_base_url not set; cannot register Telegram webhook")
+            return False
+        token = decrypt_secret(config.bot_token_encrypted)
+        url = f"{TELEGRAM_API}/bot{token}/setWebhook"
+        payload = {
+            "url": f"{settings.public_base_url.rstrip('/')}/api/v1/telegram/webhook",
+            "secret_token": self.webhook_secret(),
+            "allowed_updates": ["callback_query"],
+        }
+        try:
+            await self._post(url, payload)
+            log.info(f"Telegram webhook registered for project {project_id}")
+            return True
+        except Exception as exc:  # noqa: BLE001 - non-fatal
+            log.warning(f"setWebhook failed: {exc}")
+            return False
+
+    async def send_approval_request(self, project_id: str, post: Post, page_name: str) -> bool:
+        """Send a post for approval with inline Approve/Reject buttons."""
+        config = self.configs.get_for_project(project_id)
+        if not config:
+            raise NotFoundException("Telegram is not configured for this project")
+        preview = post.content if len(post.content) <= 600 else post.content[:600] + "…"
+        message = (
+            "📝 *Approval needed*\n\n"
+            f"*Page:* {page_name}\n"
+            f"*Title:* {post.title or '(none)'}\n\n"
+            f"{preview}\n\n"
+            f"{post.hashtags or ''}"
+        )
+        reply_markup = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Approve", "callback_data": f"approve:{post.id}"},
+                    {"text": "❌ Reject", "callback_data": f"reject:{post.id}"},
+                ]
+            ]
+        }
+        return await self._deliver(
+            project_id,
+            decrypt_secret(config.bot_token_encrypted),
+            config.chat_id,
+            message,
+            "approval_request",
+            reply_markup=reply_markup,
+        )
+
+    async def handle_callback(self, update: dict) -> None:
+        """Process an approve/reject inline-button callback from Telegram."""
+        callback = update.get("callback_query")
+        if not callback:
+            return
+        action, _, post_id = str(callback.get("data", "")).partition(":")
+        if action not in {"approve", "reject"} or not post_id:
+            return
+
+        post = PostRepository(self.db).get(post_id)
+        if not post:
+            return
+        config = self.configs.get_for_project(post.project_id)
+        if not config:
+            return
+        token = decrypt_secret(config.bot_token_encrypted)
+        message = callback.get("message") or {}
+        chat_id = (message.get("chat") or {}).get("id")
+        message_id = message.get("message_id")
+
+        if post.status != "pending_approval":
+            await self._answer(token, callback.get("id"), "Already processed")
+            return
+
+        if action == "reject":
+            post.status = "archived"
+            self.db.commit()
+            await self._answer(token, callback.get("id"), "Rejected")
+            await self._edit(token, chat_id, message_id, "❌ *Rejected* — post archived.")
+            return
+
+        # Approve -> publish to the page recorded on the post.
+        await self._answer(token, callback.get("id"), "Publishing…")
+        from app.services.facebook_service import FacebookService
+
+        try:
+            await FacebookService(self.db).publish(post.id, post.facebook_page_id or "")
+            await self._edit(token, chat_id, message_id, "✅ *Approved* — published to Facebook.")
+        except Exception as exc:  # noqa: BLE001 - report failure back to the chat
+            await self._edit(token, chat_id, message_id, f"⚠️ Publish failed: {str(exc)[:200]}")
+
+    async def _answer(self, token: str, callback_id: str | None, text: str) -> None:
+        if not callback_id:
+            return
+        url = f"{TELEGRAM_API}/bot{token}/answerCallbackQuery"
+        try:
+            await self._post(url, {"callback_query_id": callback_id, "text": text})
+        except Exception:  # noqa: BLE001 - best effort
+            pass
+
+    async def _edit(self, token: str, chat_id, message_id, text: str) -> None:  # noqa: ANN001
+        if chat_id is None or message_id is None:
+            return
+        url = f"{TELEGRAM_API}/bot{token}/editMessageText"
+        try:
+            await self._post(
+                url,
+                {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "Markdown"},
+            )
+        except Exception:  # noqa: BLE001 - best effort
+            pass
+
     async def _deliver(
-        self, project_id: str, token: str, chat_id: str, message: str, type_: str
+        self,
+        project_id: str,
+        token: str,
+        chat_id: str,
+        message: str,
+        type_: str,
+        reply_markup: dict | None = None,
     ) -> bool:
         url = f"{TELEGRAM_API}/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
+        payload: dict = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
         start = time.perf_counter()
         try:
             await retry_async(lambda: self._post(url, payload), attempts=3)
