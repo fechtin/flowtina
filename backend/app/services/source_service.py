@@ -21,6 +21,7 @@ from app.repositories.repositories import (
     SourceCacheRepository,
     TopicRepository,
 )
+from app.utils.http_client import fetch_bytes
 from app.utils.text import content_hash
 
 log = get_logger("system")
@@ -88,8 +89,10 @@ class SourceService:
 
     @staticmethod
     async def _parse_feed(url: str) -> list[SourceDocument]:
-        # feedparser is blocking; run it off the event loop.
-        parsed = await asyncio.to_thread(feedparser.parse, url)
+        # Fetch as a browser (UA + cookie session + warm-up retry) so WAF-guarded
+        # feeds don't reject us with HTTP 403, then parse the bytes in-memory.
+        raw = await fetch_bytes(url)
+        parsed = feedparser.parse(raw)
         docs: list[SourceDocument] = []
         for entry in parsed.entries[:20]:
             title = getattr(entry, "title", "") or ""

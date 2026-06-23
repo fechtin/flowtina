@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     rate_limit_authenticated: int = 300
     rate_limit_admin: int = 1000
 
+    # --- Outbound content HTTP (RSS / URL fetching) ---
+    # Emulate a real browser when fetching external pages/feeds. Many sites sit
+    # behind a WAF that returns HTTP 403 to non-browser clients until a session
+    # cookie from an initial "challenge" request is presented.
+    http_user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
+    http_fetch_timeout_seconds: int = 30
+
     # --- Pipeline / providers ---
     provider_timeout_seconds: int = 60
     provider_max_retries: int = 3
