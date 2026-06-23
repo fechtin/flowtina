@@ -1,0 +1,70 @@
+name: Deploy
+
+# Auto-deploy to the production VPS on every push to main.
+# The frontend is built in CI (so Node is not needed on the VM), the repo is
+# rsynced to the server, and scripts/remote_deploy.sh finishes the deploy.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Never run two deploys at once; let an in-flight deploy finish before the next.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Rsync source to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            --exclude '.git/' \
+            --exclude 'node_modules/' \
+            --exclude 'backend/venv/' \
+            --exclude 'backend/logs/' \
+            --exclude '**/__pycache__/' \
+            --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
+            --exclude '.env' \
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:/home/${DEPLOY_USER}/flowtina_src/"
+
+      - name: Run remote deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "sudo SRC=/home/${DEPLOY_USER}/flowtina_src bash /home/${DEPLOY_USER}/flowtina_src/scripts/remote_deploy.sh"
