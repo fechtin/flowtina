@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_owned_project
 from app.core.database import get_db
+from app.core.security import encrypt_secret
 from app.models.project import Project
-from app.models.user import User
+from app.models.user import User, UserSettings
 from app.repositories.repositories import (
     SystemLogRepository,
     UserSettingsRepository,
@@ -56,12 +57,36 @@ def generate_report(
 # --- Settings ---
 
 
+def _serialize_settings(row: UserSettings) -> dict:
+    """Expose settings without leaking secrets; surface only *_set booleans."""
+    out = SettingsOut.model_validate(row)
+    out.default_api_key_set = bool(row.default_api_key_encrypted)
+    out.telegram_bot_token_set = bool(row.telegram_bot_token_encrypted)
+    return out.model_dump()
+
+
+# Map non-secret update fields straight to their settings columns.
+_PLAIN_SETTINGS_FIELDS = (
+    "theme",
+    "language",
+    "timezone",
+    "default_provider",
+    "default_model",
+    "default_base_url",
+    "daily_budget",
+    "retry_count",
+    "random_delay_seconds",
+    "telegram_chat_id",
+    "telegram_enabled",
+)
+
+
 @router.get("/settings")
 def get_settings(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     repo = UserSettingsRepository(db)
     settings_row = repo.get_by(user_id=user.id) or repo.create(user_id=user.id)
     db.commit()
-    return ok(SettingsOut.model_validate(settings_row).model_dump())
+    return ok(_serialize_settings(settings_row))
 
 
 @router.put("/settings")
@@ -70,10 +95,23 @@ def update_settings(
 ):
     repo = UserSettingsRepository(db)
     settings_row = repo.get_by(user_id=user.id) or repo.create(user_id=user.id)
-    repo.update(settings_row, **payload.model_dump(exclude_none=True))
+
+    changes = {
+        field: getattr(payload, field)
+        for field in _PLAIN_SETTINGS_FIELDS
+        if getattr(payload, field) is not None
+    }
+    # Secrets are only (re)written when a non-empty value is supplied, so a blank
+    # form field leaves the stored credential untouched.
+    if payload.default_api_key:
+        changes["default_api_key_encrypted"] = encrypt_secret(payload.default_api_key)
+    if payload.telegram_bot_token:
+        changes["telegram_bot_token_encrypted"] = encrypt_secret(payload.telegram_bot_token)
+
+    repo.update(settings_row, **changes)
     db.commit()
     db.refresh(settings_row)
-    return ok(SettingsOut.model_validate(settings_row).model_dump(), "Settings updated")
+    return ok(_serialize_settings(settings_row), "Settings updated")
 
 
 # --- Logs ---

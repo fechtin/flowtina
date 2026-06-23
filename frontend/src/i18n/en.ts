@@ -292,6 +292,16 @@ export default {
     retryCount: 'Retry count',
     randomDelay: 'Random delay (seconds)',
     timezone: 'Timezone',
+    providerCredentials: 'Default provider credentials',
+    defaultApiKey: 'Default API key',
+    defaultBaseUrl: 'Base URL (optional)',
+    telegramGlobal: 'Telegram (global)',
+    telegramEnabled: 'Enable global Telegram fallback',
+    telegramBotToken: 'Bot token',
+    telegramChatId: 'Chat ID',
+    fallbackHint:
+      'Used for projects that have no setting of their own. Project-specific settings always take priority.',
+    notConfigured: 'Not configured',
   },
   profile: {
     title: 'Profile',

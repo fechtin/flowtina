@@ -247,9 +247,16 @@ class SettingsUpdate(BaseModel):
     timezone: str | None = None
     default_provider: str | None = None
     default_model: str | None = None
+    # Secret: only persisted when a non-empty value is provided.
+    default_api_key: str | None = None
+    default_base_url: str | None = None
     daily_budget: float | None = None
     retry_count: int | None = None
     random_delay_seconds: int | None = None
+    # Secret: only persisted when a non-empty value is provided.
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    telegram_enabled: bool | None = None
 
 
 class SettingsOut(TimestampedSchema):
@@ -259,9 +266,14 @@ class SettingsOut(TimestampedSchema):
     timezone: str
     default_provider: str | None = None
     default_model: str | None = None
+    default_base_url: str | None = None
+    default_api_key_set: bool = False
     daily_budget: float
     retry_count: int
     random_delay_seconds: int
+    telegram_chat_id: str | None = None
+    telegram_enabled: bool = False
+    telegram_bot_token_set: bool = False
 
 
 # --- Dashboard ---

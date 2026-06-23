@@ -292,6 +292,16 @@ export default {
     retryCount: 'Số lần thử lại',
     randomDelay: 'Độ trễ ngẫu nhiên (giây)',
     timezone: 'Múi giờ',
+    providerCredentials: 'Thông tin nhà cung cấp mặc định',
+    defaultApiKey: 'API key mặc định',
+    defaultBaseUrl: 'Base URL (tùy chọn)',
+    telegramGlobal: 'Telegram (toàn cục)',
+    telegramEnabled: 'Bật Telegram dự phòng toàn cục',
+    telegramBotToken: 'Bot token',
+    telegramChatId: 'Chat ID',
+    fallbackHint:
+      'Dùng cho các dự án không có cấu hình riêng. Cấu hình riêng của dự án luôn được ưu tiên.',
+    notConfigured: 'Chưa cấu hình',
   },
   profile: {
     title: 'Hồ sơ',

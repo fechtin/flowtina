@@ -231,9 +231,21 @@ export interface AppSettings {
   timezone: string
   default_provider: string
   default_model: string
+  default_base_url?: string | null
   daily_budget: number
   retry_count: number
   random_delay_seconds: number
+  telegram_chat_id?: string | null
+  telegram_enabled?: boolean
+  // Read-only flags from the API indicating a secret is stored (secrets are never returned).
+  default_api_key_set?: boolean
+  telegram_bot_token_set?: boolean
+}
+
+// Write-only secrets sent on save; only included when the user types a new value.
+export interface AppSettingsUpdate extends Partial<AppSettings> {
+  default_api_key?: string
+  telegram_bot_token?: string
 }
 
 export type LogLevel = 'debug' | 'info' | 'warning' | 'error' | 'critical'

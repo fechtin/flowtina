@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -43,6 +43,14 @@ class UserSettings(Base, BaseModelMixin):
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     default_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     default_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Global fallback API credentials for the default provider, used when a project
+    # has no AI provider of its own configured.
+    default_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    default_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     daily_budget: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     retry_count: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     random_delay_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Global fallback Telegram bot, used when a project has no Telegram config of its own.
+    telegram_bot_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telegram_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

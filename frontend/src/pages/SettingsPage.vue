@@ -8,7 +8,7 @@ import { settingsService } from '@/services'
 import { useSettingsStore } from '@/stores/settings'
 import { useAsync } from '@/composables/useAsync'
 import type { AppLocale } from '@/i18n'
-import type { AppSettings, ProviderType } from '@/types'
+import type { AppSettings, AppSettingsUpdate, ProviderType } from '@/types'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -34,10 +34,20 @@ const form = reactive<AppSettings>({
   timezone: 'UTC',
   default_provider: 'openai',
   default_model: 'gpt-4o-mini',
+  default_base_url: '',
   daily_budget: 10,
   retry_count: 3,
   random_delay_seconds: 0,
+  telegram_chat_id: '',
+  telegram_enabled: false,
 })
+
+// Whether a secret is already stored server-side (the value itself is never returned).
+const apiKeySet = ref(false)
+const telegramTokenSet = ref(false)
+// New secret values typed in this session; only sent when non-empty.
+const apiKeyInput = ref('')
+const telegramTokenInput = ref('')
 
 onMounted(async () => {
   const data = await run(() => settingsService.get(), { silentError: true })
@@ -45,9 +55,14 @@ onMounted(async () => {
     form.timezone = data.timezone || 'UTC'
     form.default_provider = data.default_provider || 'openai'
     form.default_model = data.default_model || 'gpt-4o-mini'
+    form.default_base_url = data.default_base_url || ''
     form.daily_budget = data.daily_budget ?? 10
     form.retry_count = data.retry_count ?? 3
     form.random_delay_seconds = data.random_delay_seconds ?? 0
+    form.telegram_chat_id = data.telegram_chat_id || ''
+    form.telegram_enabled = data.telegram_enabled ?? false
+    apiKeySet.value = data.default_api_key_set ?? false
+    telegramTokenSet.value = data.telegram_bot_token_set ?? false
   }
   initialLoading.value = false
 })
@@ -61,12 +76,22 @@ function onLanguageChange(lang: AppLocale) {
 }
 
 async function save() {
-  const payload: Partial<AppSettings> = {
+  const payload: AppSettingsUpdate = {
     ...form,
     theme: settingsStore.theme,
     language: settingsStore.language,
   }
-  await run(() => settingsService.update(payload), { successMessage: t('common.saved') })
+  if (apiKeyInput.value.trim()) payload.default_api_key = apiKeyInput.value.trim()
+  if (telegramTokenInput.value.trim()) payload.telegram_bot_token = telegramTokenInput.value.trim()
+  const data = await run(() => settingsService.update(payload), {
+    successMessage: t('common.saved'),
+  })
+  if (data) {
+    apiKeySet.value = data.default_api_key_set ?? false
+    telegramTokenSet.value = data.telegram_bot_token_set ?? false
+    apiKeyInput.value = ''
+    telegramTokenInput.value = ''
+  }
 }
 </script>
 
@@ -147,6 +172,68 @@ async function save() {
           <div>
             <label class="label">{{ t('settings.randomDelay') }}</label>
             <input v-model.number="form.random_delay_seconds" type="number" min="0" class="input" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+          {{ t('settings.providerCredentials') }}
+        </h2>
+        <p class="mb-4 mt-1 text-sm text-gray-500 dark:text-gray-400">
+          {{ t('settings.fallbackHint') }}
+        </p>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="label">{{ t('settings.defaultApiKey') }}</label>
+            <input
+              v-model="apiKeyInput"
+              type="password"
+              autocomplete="off"
+              class="input"
+              :placeholder="apiKeySet ? '••••••••' : t('settings.notConfigured')"
+            />
+          </div>
+          <div>
+            <label class="label">{{ t('settings.defaultBaseUrl') }}</label>
+            <input
+              v-model="form.default_base_url"
+              class="input"
+              placeholder="https://api.openai.com/v1"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+          {{ t('settings.telegramGlobal') }}
+        </h2>
+        <p class="mb-4 mt-1 text-sm text-gray-500 dark:text-gray-400">
+          {{ t('settings.fallbackHint') }}
+        </p>
+        <div class="space-y-4">
+          <label class="flex items-center gap-2">
+            <input v-model="form.telegram_enabled" type="checkbox" class="h-4 w-4" />
+            <span class="text-sm text-gray-700 dark:text-gray-300">
+              {{ t('settings.telegramEnabled') }}
+            </span>
+          </label>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label class="label">{{ t('settings.telegramBotToken') }}</label>
+              <input
+                v-model="telegramTokenInput"
+                type="password"
+                autocomplete="off"
+                class="input"
+                :placeholder="telegramTokenSet ? '••••••••' : t('settings.notConfigured')"
+              />
+            </div>
+            <div>
+              <label class="label">{{ t('settings.telegramChatId') }}</label>
+              <input v-model="form.telegram_chat_id" class="input" placeholder="-100123456789" />
+            </div>
           </div>
         </div>
       </div>

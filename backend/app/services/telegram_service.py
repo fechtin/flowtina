@@ -16,8 +16,10 @@ from app.models.integration import TelegramConfig
 from app.models.post import Post
 from app.repositories.repositories import (
     PostRepository,
+    ProjectRepository,
     TelegramConfigRepository,
     TelegramLogRepository,
+    UserSettingsRepository,
 )
 from app.schemas.content import TelegramConfigIn
 from app.utils.retry import retry_async
@@ -35,6 +37,28 @@ class TelegramService:
 
     def get_config(self, project_id: str) -> TelegramConfig | None:
         return self.configs.get_for_project(project_id)
+
+    def _resolve(self, project_id: str) -> tuple[str, str] | None:
+        """Effective (bot_token, chat_id): project config first, else global fallback.
+
+        Returns None when neither the project nor the owner's global settings have an
+        enabled Telegram bot configured.
+        """
+        config = self.configs.get_for_project(project_id)
+        if config:
+            return decrypt_secret(config.bot_token_encrypted), config.chat_id
+        project = ProjectRepository(self.db).get(project_id)
+        if not project:
+            return None
+        prefs = UserSettingsRepository(self.db).get_by(user_id=project.user_id)
+        if (
+            prefs
+            and prefs.telegram_enabled
+            and prefs.telegram_bot_token_encrypted
+            and prefs.telegram_chat_id
+        ):
+            return decrypt_secret(prefs.telegram_bot_token_encrypted), prefs.telegram_chat_id
+        return None
 
     def upsert_config(self, project_id: str, payload: TelegramConfigIn) -> TelegramConfig:
         existing = self.configs.get_by(project_id=project_id)
@@ -55,12 +79,11 @@ class TelegramService:
         return config
 
     async def send(self, project_id: str, message: str, *, type_: str = "manual") -> bool:
-        config = self.configs.get_for_project(project_id)
-        if not config:
+        resolved = self._resolve(project_id)
+        if not resolved:
             raise NotFoundException("Telegram is not configured for this project")
-        return await self._deliver(
-            project_id, decrypt_secret(config.bot_token_encrypted), config.chat_id, message, type_
-        )
+        token, chat_id = resolved
+        return await self._deliver(project_id, token, chat_id, message, type_)
 
     @staticmethod
     def webhook_secret() -> str:
@@ -71,13 +94,13 @@ class TelegramService:
 
     async def set_webhook(self, project_id: str) -> bool:
         """Register the approval webhook with Telegram for this project's bot."""
-        config = self.configs.get_for_project(project_id)
-        if not config:
+        resolved = self._resolve(project_id)
+        if not resolved:
             raise NotFoundException("Telegram is not configured for this project")
         if not settings.public_base_url:
             log.warning("public_base_url not set; cannot register Telegram webhook")
             return False
-        token = decrypt_secret(config.bot_token_encrypted)
+        token, _ = resolved
         url = f"{TELEGRAM_API}/bot{token}/setWebhook"
         payload = {
             "url": f"{settings.public_base_url.rstrip('/')}/api/v1/telegram/webhook",
@@ -94,9 +117,10 @@ class TelegramService:
 
     async def send_approval_request(self, project_id: str, post: Post, page_name: str) -> bool:
         """Send a post for approval with inline Approve/Reject buttons."""
-        config = self.configs.get_for_project(project_id)
-        if not config:
+        resolved = self._resolve(project_id)
+        if not resolved:
             raise NotFoundException("Telegram is not configured for this project")
+        token, chat_id = resolved
         preview = post.content if len(post.content) <= 600 else post.content[:600] + "…"
         message = (
             "📝 *Approval needed*\n\n"
@@ -115,8 +139,8 @@ class TelegramService:
         }
         return await self._deliver(
             project_id,
-            decrypt_secret(config.bot_token_encrypted),
-            config.chat_id,
+            token,
+            chat_id,
             message,
             "approval_request",
             reply_markup=reply_markup,
@@ -134,10 +158,10 @@ class TelegramService:
         post = PostRepository(self.db).get(post_id)
         if not post:
             return
-        config = self.configs.get_for_project(post.project_id)
-        if not config:
+        resolved = self._resolve(post.project_id)
+        if not resolved:
             return
-        token = decrypt_secret(config.bot_token_encrypted)
+        token, _ = resolved
         message = callback.get("message") or {}
         chat_id = (message.get("chat") or {}).get("id")
         message_id = message.get("message_id")

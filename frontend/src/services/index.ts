@@ -1,6 +1,7 @@
 import { http } from './http'
 import type {
   AppSettings,
+  AppSettingsUpdate,
   AuthTokens,
   DashboardCharts,
   DashboardStats,
@@ -212,7 +213,7 @@ export const dashboardService = {
 // ---------- Settings ----------
 export const settingsService = {
   get: () => http.get<unknown, AppSettings>('/settings'),
-  update: (payload: Partial<AppSettings>) => http.put<unknown, AppSettings>('/settings', payload),
+  update: (payload: AppSettingsUpdate) => http.put<unknown, AppSettings>('/settings', payload),
 }
 
 // ---------- Logs ----------

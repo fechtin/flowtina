@@ -13,7 +13,12 @@ from app.core.security import decrypt_secret
 from app.models.project import AIProvider
 from app.providers.base import GenerationResult, ProviderConfig
 from app.providers.factory import AIProviderFactory
-from app.repositories.repositories import AIProviderRepository, AIUsageLogRepository
+from app.repositories.repositories import (
+    AIProviderRepository,
+    AIUsageLogRepository,
+    ProjectRepository,
+    UserSettingsRepository,
+)
 from app.schemas.project import (
     ProviderModelsRequest,
     ProviderTestRequest,
@@ -48,15 +53,44 @@ class AIService:
             grounding=provider.grounding_enabled,
         )
 
+    def _global_fallback_config(self, project_id: str) -> ProviderConfig | None:
+        """Build a provider config from the project owner's global default settings.
+
+        Used when a project has no AI provider of its own. The API key comes from the
+        saved global key, falling back to the env-configured key for that provider.
+        """
+        project = ProjectRepository(self.db).get(project_id)
+        if not project:
+            return None
+        prefs = UserSettingsRepository(self.db).get_by(user_id=project.user_id)
+        if not prefs or not prefs.default_provider:
+            return None
+        api_key = (
+            decrypt_secret(prefs.default_api_key_encrypted or "")
+            or settings.provider_api_key(prefs.default_provider)
+            or None
+        )
+        return ProviderConfig(
+            provider=prefs.default_provider,
+            model=prefs.default_model or "",
+            api_key=api_key,
+            base_url=prefs.default_base_url,
+        )
+
     async def generate(self, project_id: str, prompt: str) -> GenerationResult:
-        """Generate text, trying each enabled provider (by priority) in turn."""
-        providers = self.providers.list_enabled(project_id)
-        if not providers:
-            raise ProviderException("No enabled AI provider configured for this project")
+        """Generate text, trying each enabled provider (by priority) in turn.
+
+        Falls back to the owner's global default provider when the project has none.
+        """
+        configs = [self._to_config(p) for p in self.providers.list_enabled(project_id)]
+        if not configs:
+            fallback = self._global_fallback_config(project_id)
+            if fallback is None:
+                raise ProviderException("No enabled AI provider configured for this project")
+            configs = [fallback]
 
         last_error: Exception | None = None
-        for provider in providers:
-            config = self._to_config(provider)
+        for config in configs:
             client = AIProviderFactory.create(config)
             start = time.perf_counter()
             try:
