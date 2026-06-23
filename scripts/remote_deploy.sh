@@ -61,8 +61,16 @@ systemctl daemon-reload
 systemctl enable flowtina-api flowtina-scheduler
 
 log "Configuring nginx..."
-cp "${SRC}/deploy/nginx.conf" /etc/nginx/sites-available/flowtina
-ln -sf /etc/nginx/sites-available/flowtina /etc/nginx/sites-enabled/flowtina
+# Only install the bootstrap (HTTP-only) site on first deploy. On later runs keep
+# the existing config so certbot's TLS server block + redirect are not clobbered
+# (overwriting it drops the :443 listener and breaks HTTPS / causes a CDN 521).
+NGINX_SITE="/etc/nginx/sites-available/flowtina"
+if [[ -f "${NGINX_SITE}" ]]; then
+  log "  Keeping existing nginx site (preserving any TLS config)."
+else
+  cp "${SRC}/deploy/nginx.conf" "${NGINX_SITE}"
+fi
+ln -sf "${NGINX_SITE}" /etc/nginx/sites-enabled/flowtina
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl restart nginx

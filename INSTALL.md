@@ -177,21 +177,42 @@ Both layers must allow inbound 80/443:
    group / network ACL. Add inbound rules for TCP **80** and **443** there too,
    or the ports stay blocked even though ufw allows them.
 
-Note: some cloud Linux images ship a host `iptables` ruleset that is evaluated
-**before** the ufw chains, with a blanket `REJECT`/`DROP` after the SSH rule. In
-that case ufw's allows never take effect. Verify with:
+Note: some cloud Linux images (notably **Oracle Cloud / OCI**) ship a host
+`iptables` ruleset — loaded at boot by `netfilter-persistent` from
+`/etc/iptables/rules.v4` — that is evaluated **before** the ufw chains, with a
+blanket `REJECT`/`DROP` after the SSH rule. While that ruleset is active, ufw's
+allows for 80/443 never take effect. Verify with:
 
 ```bash
 sudo iptables -S INPUT
 ```
 
-If you see a `REJECT`/`DROP` before the `ufw-*` chains, insert ACCEPT rules for
-80/443 ahead of it and persist them:
+**ufw is the single firewall manager on this deployment.** The `ufw` package
+`Breaks` (conflicts with) `iptables-persistent` / `netfilter-persistent`, so
+installing ufw — which the installer does — automatically removes them, and with
+them the boot-time loader for that legacy `REJECT`. Do **not** reinstall
+`iptables-persistent` alongside ufw; apt would uninstall ufw again.
+
+Because the legacy loader is gone, after a reboot only ufw's rules apply, so
+80/443 stay open (ufw is enabled on boot). Confirm and clean up:
+
+```bash
+sudo ufw status verbose      # Status: active, with 22/80/443 ALLOW
+systemctl is-enabled ufw     # -> enabled (loads on boot)
+
+# Drop the now-orphaned legacy ruleset so a future iptables-persistent
+# reinstall can never reintroduce a pre-ufw REJECT:
+sudo rm -f /etc/iptables/rules.v4 /etc/iptables/rules.v6
+```
+
+Only if ufw is **not** in use (you manage raw iptables yourself) should you insert
+ACCEPT rules ahead of the first REJECT/DROP and persist them the classic way —
+this removes ufw:
 
 ```bash
 sudo iptables -I INPUT 5 -p tcp --dport 80  -j ACCEPT
 sudo iptables -I INPUT 6 -p tcp --dport 443 -j ACCEPT
-sudo apt-get install -y iptables-persistent
+sudo apt-get install -y iptables-persistent   # NOTE: this removes ufw
 sudo netfilter-persistent save
 ```
 
