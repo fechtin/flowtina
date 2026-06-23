@@ -36,6 +36,8 @@ class AIProvider(Base, BaseModelMixin):
     system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # When true, Gemini grounds answers with live Google Search results.
+    grounding_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class SystemPrompt(Base, BaseModelMixin):

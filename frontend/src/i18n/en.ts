@@ -112,6 +112,8 @@ export default {
     testSuccess: 'Connection successful',
     testFailed: 'Connection failed',
     latency: 'Latency',
+    grounding: 'Google Search grounding',
+    groundingHint: 'Gemini only. Searches Google live so posts use fresh, real-world info (incurs Google grounding cost).',
   },
   prompts: {
     title: 'Prompts',

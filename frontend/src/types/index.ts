@@ -63,6 +63,7 @@ export interface Provider {
   system_prompt?: string | null
   priority: number
   enabled: boolean
+  grounding_enabled?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -79,6 +80,7 @@ export interface ProviderPayload {
   system_prompt?: string
   priority: number
   enabled: boolean
+  grounding_enabled: boolean
 }
 
 export interface ProviderTestResult {

@@ -53,6 +53,7 @@ const form = reactive<ProviderPayload>({
   system_prompt: '',
   priority: 0,
   enabled: true,
+  grounding_enabled: false,
 })
 const existingMask = ref<string | null>(null)
 
@@ -87,6 +88,7 @@ function resetForm() {
   form.system_prompt = ''
   form.priority = 0
   form.enabled = true
+  form.grounding_enabled = false
   existingMask.value = null
   testResult.value = null
   testPrompt.value = 'Hello, respond with a short greeting.'
@@ -112,6 +114,7 @@ function openEdit(p: Provider) {
   form.system_prompt = p.system_prompt ?? ''
   form.priority = p.priority
   form.enabled = p.enabled
+  form.grounding_enabled = p.grounding_enabled ?? false
   existingMask.value = p.api_key_masked ?? null
   showForm.value = true
 }
@@ -129,6 +132,7 @@ function buildPayload(): ProviderPayload {
     system_prompt: form.system_prompt?.trim() || undefined,
     priority: Number(form.priority),
     enabled: form.enabled,
+    grounding_enabled: form.grounding_enabled,
   }
 }
 
@@ -308,6 +312,14 @@ async function runTest() {
         <div class="flex items-center gap-2">
           <ToggleSwitch v-model="form.enabled" />
           <span class="text-sm text-gray-600 dark:text-gray-300">{{ t('common.enabled') }}</span>
+        </div>
+
+        <div v-if="form.provider === 'gemini'" class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.grounding_enabled" />
+            <span class="text-sm text-gray-600 dark:text-gray-300">{{ t('providers.grounding') }}</span>
+          </div>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('providers.groundingHint') }}</p>
         </div>
 
         <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">

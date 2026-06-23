@@ -9,6 +9,16 @@ class GeminiProvider(BaseAIProvider):
     name = "gemini"
     default_base_url = "https://generativelanguage.googleapis.com/v1beta"
 
+    @staticmethod
+    def _grounding_tool(model: str) -> dict:
+        """Select the Google Search grounding tool shape for the model family.
+
+        Gemini 1.5 uses ``google_search_retrieval``; Gemini 2.x+ uses ``google_search``.
+        """
+        if "1.5" in model:
+            return {"google_search_retrieval": {}}
+        return {"google_search": {}}
+
     async def generate(self, prompt: str) -> GenerationResult:
         base = (self.config.base_url or self.default_base_url).rstrip("/")
         model = self.config.model or "gemini-1.5-flash"
@@ -19,7 +29,7 @@ class GeminiProvider(BaseAIProvider):
         if self.config.system_prompt:
             parts_text = f"{self.config.system_prompt}\n\n{prompt}"
 
-        payload = {
+        payload: dict = {
             "contents": [{"parts": [{"text": parts_text}]}],
             "generationConfig": {
                 "temperature": self.config.temperature,
@@ -27,6 +37,8 @@ class GeminiProvider(BaseAIProvider):
                 "maxOutputTokens": self.config.max_tokens,
             },
         }
+        if self.config.grounding:
+            payload["tools"] = [self._grounding_tool(model)]
         data = await self._post_json(url, headers, payload)
         candidates = data.get("candidates") or [{}]
         content = (candidates[0].get("content") or {}).get("parts") or [{}]

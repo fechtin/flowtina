@@ -39,6 +39,7 @@ class AIService:
             max_tokens=provider.max_tokens,
             timeout_seconds=provider.timeout_seconds,
             system_prompt=provider.system_prompt,
+            grounding=provider.grounding_enabled,
         )
 
     async def generate(self, project_id: str, prompt: str) -> GenerationResult:

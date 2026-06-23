@@ -35,6 +35,8 @@ class ProviderConfig:
     max_tokens: int = 1024
     timeout_seconds: int = 60
     system_prompt: str | None = None
+    # Enable Google Search grounding (provider-specific; currently honored by Gemini).
+    grounding: bool = False
 
 
 class BaseAIProvider:

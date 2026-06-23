@@ -112,6 +112,8 @@ export default {
     testSuccess: 'Kết nối thành công',
     testFailed: 'Kết nối thất bại',
     latency: 'Độ trễ',
+    grounding: 'Grounding Google Search',
+    groundingHint: 'Chỉ cho Gemini. Tự tìm Google theo thời gian thực để bài viết dùng thông tin mới, có thật (phát sinh phí grounding của Google).',
   },
   prompts: {
     title: 'Mẫu lời nhắc',

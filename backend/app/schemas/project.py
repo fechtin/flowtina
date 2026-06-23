@@ -47,6 +47,7 @@ class ProviderCreate(BaseModel):
     system_prompt: str | None = None
     priority: int = 0
     enabled: bool = True
+    grounding_enabled: bool = False
 
 
 class ProviderUpdate(BaseModel):
@@ -61,6 +62,7 @@ class ProviderUpdate(BaseModel):
     system_prompt: str | None = None
     priority: int | None = None
     enabled: bool | None = None
+    grounding_enabled: bool | None = None
 
 
 class ProviderOut(TimestampedSchema):
@@ -76,6 +78,7 @@ class ProviderOut(TimestampedSchema):
     system_prompt: str | None = None
     priority: int
     enabled: bool
+    grounding_enabled: bool = False
 
 
 class ProviderTestRequest(BaseModel):

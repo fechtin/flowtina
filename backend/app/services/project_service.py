@@ -121,6 +121,7 @@ class ProviderService:
             "system_prompt": provider.system_prompt,
             "priority": provider.priority,
             "enabled": provider.enabled,
+            "grounding_enabled": provider.grounding_enabled,
             "created_at": provider.created_at,
             "updated_at": provider.updated_at,
         }
