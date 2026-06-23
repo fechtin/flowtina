@@ -184,7 +184,7 @@ async function generate() {
 function openPublish(p: Post, mode: 'publish' | 'retry') {
   publishTarget.value = p
   publishMode.value = mode
-  selectedPageId.value = pages.value[0]?.page_id ?? ''
+  selectedPageId.value = pages.value[0]?.id ?? ''
   showPublish.value = true
 }
 
@@ -446,7 +446,7 @@ watch(projectId, () => {
         <div v-if="pages.length">
           <label class="label">{{ t('facebook.pageName') }}</label>
           <select v-model="selectedPageId" class="input">
-            <option v-for="pg in pages" :key="pg.id" :value="pg.page_id">{{ pg.page_name }}</option>
+            <option v-for="pg in pages" :key="pg.id" :value="pg.id">{{ pg.page_name }}</option>
           </select>
         </div>
         <p v-else class="text-sm text-gray-500 dark:text-gray-400">
