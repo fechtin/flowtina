@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Sparkles, Pencil, Trash2, Send, RefreshCw, Bot } from 'lucide-vue-next'
+import { Plus, Sparkles, Pencil, Trash2, Send, RefreshCw, Bot, Eye } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -29,6 +29,15 @@ const activeStatus = ref<PostStatus>('draft')
 const loading = ref(false)
 const posts = ref<Post[]>([])
 const pages = ref<FacebookPage[]>([])
+
+// Preview modal
+const previewing = ref<Post | null>(null)
+const showPreview = ref(false)
+
+function openPreview(p: Post) {
+  previewing.value = p
+  showPreview.value = true
+}
 
 // Create / edit modal
 const showForm = ref(false)
@@ -261,7 +270,11 @@ watch(projectId, () => {
             <StatusBadge :status="p.status" :label="t(`posts.${p.status}`)" />
           </div>
 
-          <p class="mt-2 line-clamp-3 text-sm text-gray-500 dark:text-gray-400">
+          <p
+            class="mt-2 line-clamp-3 cursor-pointer text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            :title="t('posts.preview')"
+            @click="openPreview(p)"
+          >
             {{ truncate(p.content, 200) }}
           </p>
 
@@ -306,12 +319,47 @@ watch(projectId, () => {
               <RefreshCw class="h-4 w-4" /> {{ t('common.retry') }}
             </button>
             <span class="flex-1"></span>
+            <button class="btn-ghost" :title="t('posts.preview')" @click="openPreview(p)"><Eye class="h-4 w-4" /></button>
             <button class="btn-ghost" @click="openEdit(p)"><Pencil class="h-4 w-4" /></button>
             <button class="btn-ghost text-red-600" @click="confirmDelete(p.id)"><Trash2 class="h-4 w-4" /></button>
           </div>
         </div>
       </div>
     </template>
+
+    <!-- Preview modal -->
+    <BaseModal v-model="showPreview" :title="previewing?.title || t('posts.preview')">
+      <div v-if="previewing" class="space-y-4">
+        <div class="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+          <StatusBadge :status="previewing.status" :label="t(`posts.${previewing.status}`)" />
+          <span>{{ t('posts.qualityScore') }}: {{ previewing.quality_score }}</span>
+          <span
+            v-if="previewing.created_by_ai"
+            class="badge inline-flex items-center gap-1 bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+          >
+            <Bot class="h-3 w-3" /> {{ t('posts.aiGenerated') }}
+          </span>
+        </div>
+        <p class="max-h-[55vh] overflow-y-auto whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-200">
+          {{ previewing.content }}
+        </p>
+        <div v-if="hashtagList(previewing.hashtags).length" class="flex flex-wrap gap-1">
+          <span
+            v-for="tag in hashtagList(previewing.hashtags)"
+            :key="tag"
+            class="badge bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300"
+          >
+            {{ tag }}
+          </span>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" class="btn-secondary" @click="showPreview = false">{{ t('common.close') }}</button>
+          <button type="button" class="btn-primary" @click="showPreview = false; openEdit(previewing)">
+            <Pencil class="h-4 w-4" /> {{ t('posts.editPost') }}
+          </button>
+        </div>
+      </div>
+    </BaseModal>
 
     <!-- Create / Edit modal -->
     <BaseModal v-model="showForm" :title="editing ? t('posts.editPost') : t('posts.newPost')">

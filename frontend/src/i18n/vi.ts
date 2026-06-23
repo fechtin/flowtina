@@ -181,6 +181,7 @@ export default {
     hashtags: 'Thẻ hashtag',
     qualityScore: 'Chất lượng',
     aiGenerated: 'Tạo bởi AI',
+    preview: 'Xem trước',
     generated: 'Đã tạo {count} bài đăng',
     publishedMsg: 'Đã đăng bài',
   },

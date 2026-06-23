@@ -181,6 +181,7 @@ export default {
     hashtags: 'Hashtags',
     qualityScore: 'Quality',
     aiGenerated: 'AI generated',
+    preview: 'Preview',
     generated: 'Generated {count} posts',
     publishedMsg: 'Post published',
   },
