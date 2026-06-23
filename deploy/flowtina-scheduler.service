@@ -1,0 +1,18 @@
+[Unit]
+Description=Flowtina Scheduler (APScheduler background jobs)
+After=network.target flowtina-api.service
+
+[Service]
+Type=simple
+User=flowtina
+Group=flowtina
+WorkingDirectory=/opt/flowtina/backend
+EnvironmentFile=/opt/flowtina/config/.env
+Environment=SCHEDULER_ENABLED=true
+ExecStart=/opt/flowtina/venv/bin/python -m app.scheduler.runner
+Restart=always
+RestartSec=5
+MemoryMax=200M
+
+[Install]
+WantedBy=multi-user.target

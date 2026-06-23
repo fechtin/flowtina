@@ -1,0 +1,33 @@
+# Flowtina configuration reference.
+# Runtime config is primarily driven by environment variables (see config/.env).
+# This file documents defaults and is safe to commit (no secrets).
+
+app:
+  name: Flowtina
+  host: 0.0.0.0
+  port: 8000
+  default_language: en
+
+database:
+  # SQLite by default; override with DATABASE_URL for PostgreSQL.
+  sqlite_path: database/app.db
+  pool_size: 5
+  max_overflow: 5
+
+scheduler:
+  enabled: true
+  max_threads: 2
+
+logging:
+  level: INFO
+  retention_days: 30
+  compression: zip
+
+security:
+  access_token_expire_minutes: 60
+  refresh_token_expire_days: 14
+
+performance:
+  memory_target_mb: 300
+  cpu_idle_target_percent: 5
+  startup_target_seconds: 3

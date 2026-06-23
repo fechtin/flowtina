@@ -1,0 +1,225 @@
+export interface ApiSuccess<T> {
+  success: true
+  message: string
+  data: T
+}
+
+export interface ApiError {
+  success: false
+  error: {
+    code: string
+    message: string
+  }
+}
+
+export interface AuthTokens {
+  access_token: string
+  refresh_token: string
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  language: string
+  timezone: string
+  is_admin: boolean
+  active: boolean
+  avatar?: string | null
+}
+
+export interface Project {
+  id: string
+  user_id: string
+  name: string
+  description: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ProviderType =
+  | 'openai'
+  | 'gemini'
+  | 'claude'
+  | 'openrouter'
+  | 'deepseek'
+  | 'ollama'
+  | 'lmstudio'
+  | 'vllm'
+  | 'custom'
+
+export interface Provider {
+  id: string
+  project_id: string
+  provider: ProviderType
+  base_url?: string | null
+  api_key_masked?: string | null
+  model: string
+  temperature: number
+  top_p: number
+  max_tokens: number
+  timeout_seconds: number
+  system_prompt?: string | null
+  priority: number
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ProviderPayload {
+  provider: ProviderType
+  base_url?: string
+  api_key?: string
+  model: string
+  temperature: number
+  top_p: number
+  max_tokens: number
+  timeout_seconds: number
+  system_prompt?: string
+  priority: number
+  enabled: boolean
+}
+
+export interface ProviderTestResult {
+  success: boolean
+  latency_ms: number
+  output?: string
+  error?: string
+}
+
+export interface PromptTemplate {
+  id: string
+  project_id?: string
+  name: string
+  type: string
+  template: string
+  language: string
+  version: number
+  active: boolean
+}
+
+export interface SystemPrompt {
+  id: string
+  project_id?: string
+  name: string
+  content: string
+  version: number
+  active: boolean
+}
+
+export interface Topic {
+  id: string
+  project_id?: string
+  topic: string
+  priority: number
+}
+
+export interface RssSource {
+  id: string
+  project_id?: string
+  url: string
+}
+
+export interface Keyword {
+  id: string
+  project_id?: string
+  keyword: string
+  priority: number
+}
+
+export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed' | 'archived'
+
+export interface Post {
+  id: string
+  project_id: string
+  title: string
+  content: string
+  hashtags: string[]
+  language: string
+  status: PostStatus
+  quality_score: number
+  publish_at?: string | null
+  published_at?: string | null
+  created_by_ai: boolean
+  version: number
+  error_message?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Job {
+  id: string
+  project_id: string
+  name: string
+  job_type: string
+  cron_expression?: string | null
+  interval_seconds?: number | null
+  timezone: string
+  enabled: boolean
+  last_run_at?: string | null
+  next_run_at?: string | null
+}
+
+export interface JobHistory {
+  id: string
+  job_id: string
+  status: string
+  started_at: string
+  finished_at?: string | null
+  message?: string | null
+}
+
+export interface FacebookPage {
+  id: string
+  project_id?: string
+  page_name: string
+  page_id: string
+  access_token?: string
+}
+
+export interface TelegramConfig {
+  id?: string
+  project_id?: string
+  bot_token: string
+  chat_id: string
+  enabled: boolean
+}
+
+export interface DashboardStats {
+  posts_today: number
+  published_today: number
+  failed_today: number
+  success_rate: number
+  total_posts: number
+  total_tokens: number
+  total_cost: number
+  facebook_pages: number
+  active_jobs: number
+}
+
+export interface DashboardCharts {
+  labels: string[]
+  posts: number[]
+}
+
+export interface AppSettings {
+  theme: string
+  language: string
+  timezone: string
+  default_provider: string
+  default_model: string
+  daily_budget: number
+  retry_count: number
+  random_delay_seconds: number
+}
+
+export type LogLevel = 'debug' | 'info' | 'warning' | 'error' | 'critical'
+
+export interface LogEntry {
+  id: string
+  level: LogLevel
+  module: string
+  message: string
+  created_at: string
+}

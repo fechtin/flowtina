@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+backend/venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment & secrets
+.env
+config/.env
+backend/.env
+*.pem
+ssl/
+
+# Database & runtime
+backend/database/*.db
+backend/database/*.db-wal
+backend/database/*.db-shm
+database/*.db
+logs/
+backend/logs/
+uploads/
+backups/
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

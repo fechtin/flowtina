@@ -1,0 +1,19 @@
+[Unit]
+Description=Flowtina API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=flowtina
+Group=flowtina
+WorkingDirectory=/opt/flowtina/backend
+EnvironmentFile=/opt/flowtina/config/.env
+Environment=SCHEDULER_ENABLED=false
+ExecStart=/opt/flowtina/venv/bin/gunicorn app.main:app -c /opt/flowtina/backend/gunicorn_conf.py
+Restart=always
+RestartSec=5
+# Resource hygiene for a 1GB VPS
+MemoryMax=350M
+
+[Install]
+WantedBy=multi-user.target
