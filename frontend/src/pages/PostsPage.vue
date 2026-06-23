@@ -97,11 +97,20 @@ function openCreate() {
   showForm.value = true
 }
 
+/** Split a stored hashtags string (space- or comma-separated) into normalized "#tag" tokens. */
+function hashtagList(raw: string | null | undefined): string[] {
+  return (raw ?? '')
+    .split(/[\s,]+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => (t.startsWith('#') ? t : `#${t}`))
+}
+
 function openEdit(p: Post) {
   editing.value = p
   form.title = p.title
   form.content = p.content
-  form.hashtags = (p.hashtags ?? []).join(', ')
+  form.hashtags = hashtagList(p.hashtags).join(', ')
   form.language = p.language
   form.status = p.status
   showForm.value = true
@@ -110,10 +119,7 @@ function openEdit(p: Post) {
 async function save() {
   if (!projectId.value) return
   const pid = projectId.value
-  const hashtags = form.hashtags
-    .split(',')
-    .map((h) => h.trim())
-    .filter(Boolean)
+  const hashtags = hashtagList(form.hashtags).join(' ')
   const action = editing.value
     ? () =>
         postService.update(editing.value!.id, {
@@ -259,9 +265,9 @@ watch(projectId, () => {
             {{ truncate(p.content, 200) }}
           </p>
 
-          <div v-if="p.hashtags?.length" class="mt-3 flex flex-wrap gap-1">
+          <div v-if="hashtagList(p.hashtags).length" class="mt-3 flex flex-wrap gap-1">
             <span
-              v-for="tag in p.hashtags"
+              v-for="tag in hashtagList(p.hashtags)"
               :key="tag"
               class="badge bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300"
             >

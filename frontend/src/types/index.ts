@@ -143,7 +143,7 @@ export interface Post {
   project_id: string
   title: string
   content: string
-  hashtags: string[]
+  hashtags: string | null
   language: string
   status: PostStatus
   quality_score: number

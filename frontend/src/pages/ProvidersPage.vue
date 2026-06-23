@@ -232,9 +232,9 @@ async function runTest() {
             <dt>{{ t('providers.temperature') }}</dt>
             <dd class="font-medium text-gray-700 dark:text-gray-200">{{ p.temperature }}</dd>
           </div>
-          <div class="flex justify-between">
-            <dt>{{ t('providers.apiKey') }}</dt>
-            <dd class="font-mono text-gray-700 dark:text-gray-200">{{ p.api_key_masked || '—' }}</dd>
+          <div class="flex justify-between gap-2">
+            <dt class="shrink-0 whitespace-nowrap">{{ t('providers.apiKey') }}</dt>
+            <dd class="min-w-0 truncate font-mono text-gray-700 dark:text-gray-200" :title="p.api_key_masked || ''">{{ p.api_key_masked || '—' }}</dd>
           </div>
         </dl>
         <div class="mt-4 flex items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">

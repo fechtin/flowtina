@@ -108,7 +108,7 @@ export const postService = {
   ) => http.get<unknown, Post[]>(`/projects/${pid}/posts`, { params }),
   create: (
     pid: string,
-    payload: { title?: string; content: string; hashtags?: string[]; language: string; status: PostStatus },
+    payload: { title?: string; content: string; hashtags?: string; language: string; status: PostStatus },
   ) => http.post<unknown, Post>(`/projects/${pid}/posts`, payload),
   generate: (
     pid: string,
