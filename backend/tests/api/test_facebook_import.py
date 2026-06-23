@@ -68,6 +68,23 @@ async def test_import_prunes_pages_no_longer_returned(db_session, project, monke
     assert FacebookPageRepository(db_session).count(project_id=project.id) == 1
 
 
+async def test_sync_reuses_stored_token(db_session, project, monkeypatch):
+    async def fake_get(url, params):
+        return ACCOUNTS
+
+    monkeypatch.setattr("app.services.facebook_service.FacebookService._get", staticmethod(fake_get))
+    monkeypatch.setattr("app.core.config.settings.facebook_system_token", "", raising=False)
+    svc = FacebookService(db_session)
+    # First import supplies the token; it should be persisted on the project.
+    await svc.import_pages(project.id, token="system-user-token")
+    db_session.refresh(project)
+    assert project.facebook_system_token_encrypted
+
+    # Second sync with no token must reuse the stored one (no error raised).
+    pages = await svc.import_pages(project.id, token=None)
+    assert {p.page_id for p in pages} == {"100", "200"}
+
+
 async def test_import_without_token_raises(db_session, project, monkeypatch):
     monkeypatch.setattr("app.core.config.settings.facebook_system_token", "", raising=False)
     with pytest.raises(ValidationException):

@@ -195,7 +195,7 @@ export default {
     importHint: 'Paste one long-lived / System User token. Flowtina fetches all your pages and their tokens automatically — no need to enter page IDs or per-page tokens.',
     importToken: 'Facebook token',
     importTokenPlaceholder: 'EAAB... (System User or long-lived user token)',
-    importTokenOptional: 'Leave empty to use the server-configured token (FACEBOOK_SYSTEM_TOKEN).',
+    importTokenOptional: 'Leave empty to reuse the token saved from a previous import (or the server-configured FACEBOOK_SYSTEM_TOKEN).',
     imported: 'Imported {count} page(s)',
     howToTitle: 'How to get a token',
     howToStep0: 'Create a Facebook App (one time, free): developers.facebook.com → My Apps → Create App → type “Business”. No App Review is needed when posting to your own Pages.',

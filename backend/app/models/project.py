@@ -16,6 +16,9 @@ class Project(Base, BaseModelMixin):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True, nullable=False)
+    # Long-lived Facebook System User token used to import/sync Pages. Persisted
+    # (encrypted) on import so later "Sync pages" runs reuse it without re-entry.
+    facebook_system_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class AIProvider(Base, BaseModelMixin):

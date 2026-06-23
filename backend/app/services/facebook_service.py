@@ -15,6 +15,7 @@ from app.core.logger import get_logger
 from app.core.security import decrypt_secret, encrypt_secret
 from app.models.integration import FacebookPage
 from app.models.post import Post
+from app.models.project import Project
 from app.repositories.repositories import (
     FacebookPageRepository,
     FacebookPostRepository,
@@ -59,12 +60,20 @@ class FacebookService:
     async def import_pages(self, project_id: str, token: str | None = None) -> list[FacebookPage]:
         """Discover and connect the operator's Pages from a single token.
 
-        Uses the supplied token, or falls back to the configured system token.
-        Calls Graph ``/me/accounts`` to fetch each Page's id, name and per-page
-        access token automatically — no manual page-id/token entry needed. Pages
-        already connected are updated (token refreshed) rather than duplicated.
+        Token resolution order: the supplied token, then the project's previously
+        stored token, then the server-configured system token. Calls Graph
+        ``/me/accounts`` to fetch each Page's id, name and per-page access token
+        automatically — no manual page-id/token entry needed. Pages already
+        connected are updated (token refreshed) rather than duplicated. The working
+        token is persisted (encrypted) on the project so later syncs reuse it.
         """
-        token = (token or settings.facebook_system_token or "").strip()
+        project = self.db.get(Project, project_id)
+        stored = (
+            decrypt_secret(project.facebook_system_token_encrypted)
+            if project and project.facebook_system_token_encrypted
+            else ""
+        )
+        token = (token or stored or settings.facebook_system_token or "").strip()
         if not token:
             raise ValidationException("No Facebook token provided or configured")
 
@@ -72,6 +81,10 @@ class FacebookService:
         accounts = await self._fetch_accounts(token)
         if not accounts:
             raise FacebookException("No Pages found for this token (check its permissions)")
+
+        # Remember the working token so a later "Sync pages" needs no re-entry.
+        if project is not None:
+            project.facebook_system_token_encrypted = encrypt_secret(token)
 
         existing = {p.page_id: p for p in self.pages.list(project_id=project_id)}
         result: list[FacebookPage] = []

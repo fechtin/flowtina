@@ -195,7 +195,7 @@ export default {
     importHint: 'Dán một token dài hạn / System User. Flowtina sẽ tự lấy toàn bộ Page và token của từng Page — bạn không cần nhập ID hay token cho từng Page.',
     importToken: 'Token Facebook',
     importTokenPlaceholder: 'EAAB... (System User hoặc user token dài hạn)',
-    importTokenOptional: 'Để trống để dùng token đã cấu hình trên máy chủ (FACEBOOK_SYSTEM_TOKEN).',
+    importTokenOptional: 'Để trống để dùng lại token đã lưu từ lần nhập trước (hoặc token cấu hình trên máy chủ FACEBOOK_SYSTEM_TOKEN).',
     imported: 'Đã nhập {count} trang',
     howToTitle: 'Cách lấy token',
     howToStep0: 'Tạo Facebook App (1 lần, miễn phí): developers.facebook.com → My Apps → Create App → chọn loại “Business”. Không cần App Review khi đăng lên Page của chính bạn.',
