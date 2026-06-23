@@ -111,6 +111,12 @@ class SystemPromptCreate(BaseModel):
     active: bool = True
 
 
+class SystemPromptUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    content: str | None = None
+    active: bool | None = None
+
+
 class SystemPromptOut(TimestampedSchema):
     project_id: str
     name: str

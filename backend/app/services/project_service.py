@@ -22,6 +22,7 @@ from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
     SystemPromptCreate,
+    SystemPromptUpdate,
 )
 
 
@@ -164,6 +165,29 @@ class PromptService:
         self.db.commit()
         self.db.refresh(prompt)
         return prompt
+
+    def update_system(self, prompt_id: str, payload: SystemPromptUpdate) -> SystemPrompt:
+        prompt = self.system.get(prompt_id)
+        if not prompt:
+            raise NotFoundException("System prompt not found")
+        data = payload.model_dump(exclude_none=True)
+        if data.get("active") and not prompt.active:
+            for sp in self.system.list(project_id=prompt.project_id, active=True):
+                if sp.id != prompt.id:
+                    sp.active = False
+        if "content" in data:
+            prompt.version += 1
+        self.system.update(prompt, **data)
+        self.db.commit()
+        self.db.refresh(prompt)
+        return prompt
+
+    def delete_system(self, prompt_id: str) -> None:
+        prompt = self.system.get(prompt_id)
+        if not prompt:
+            raise NotFoundException("System prompt not found")
+        self.system.soft_delete(prompt)
+        self.db.commit()
 
     def list_templates(self, project_id: str) -> list[PromptTemplate]:
         return self.templates.list(project_id=project_id)

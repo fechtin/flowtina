@@ -18,6 +18,7 @@ from app.schemas.project import (
     PromptTemplateUpdate,
     SystemPromptCreate,
     SystemPromptOut,
+    SystemPromptUpdate,
 )
 from app.services.project_service import PromptService
 
@@ -38,6 +39,25 @@ def create_system_prompt(
 ):
     prompt = PromptService(db).create_system(project.id, payload)
     return ok(SystemPromptOut.model_validate(prompt).model_dump(), "System prompt created")
+
+
+@router.put("/system-prompts/{prompt_id}")
+def update_system_prompt(
+    prompt_id: str,
+    payload: SystemPromptUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    prompt = PromptService(db).update_system(prompt_id, payload)
+    return ok(SystemPromptOut.model_validate(prompt).model_dump(), "System prompt updated")
+
+
+@router.delete("/system-prompts/{prompt_id}")
+def delete_system_prompt(
+    prompt_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    PromptService(db).delete_system(prompt_id)
+    return ok(message="System prompt deleted")
 
 
 @router.get("/projects/{project_id}/prompts")

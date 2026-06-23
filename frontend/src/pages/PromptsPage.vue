@@ -155,7 +155,7 @@ async function saveSystem() {
   if (!projectId.value) return
   const action = async (): Promise<void> => {
     if (editingSystem.value) {
-      await promptService.update(editingSystem.value.id, {
+      await promptService.updateSystem(editingSystem.value.id, {
         name: systemForm.name,
         content: systemForm.content,
         active: systemForm.active,
@@ -182,9 +182,9 @@ function confirmDelete(id: string) {
 
 async function doDelete() {
   if (!deleteId.value) return
-  const ok = await run(() => promptService.remove(deleteId.value!), {
-    successMessage: t('common.deleted'),
-  })
+  const id = deleteId.value
+  const remove = tab.value === 'system' ? promptService.removeSystem : promptService.remove
+  const ok = await run(() => remove(id), { successMessage: t('common.deleted') })
   if (ok !== undefined) await load()
 }
 </script>

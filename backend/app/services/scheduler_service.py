@@ -50,7 +50,13 @@ class SchedulerService:
     def update(self, job_id: str, payload: JobUpdate) -> SchedulerJob:
         job = self.get(job_id)
         self._validate_page(job.project_id, payload.facebook_page_id)
-        self.jobs.update(job, **payload.model_dump(exclude_none=True))
+        data = payload.model_dump(exclude_unset=True)
+        self.jobs.update(job, **{k: v for k, v in data.items() if v is not None})
+        # cron_expression and interval_seconds are mutually exclusive. The base repo
+        # skips None values, so apply explicit clears here when either was provided.
+        if "cron_expression" in data or "interval_seconds" in data:
+            job.cron_expression = data.get("cron_expression")
+            job.interval_seconds = data.get("interval_seconds")
         self.db.commit()
         self.db.refresh(job)
         self._sync(job)

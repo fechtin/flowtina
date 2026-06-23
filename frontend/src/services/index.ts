@@ -79,6 +79,11 @@ export const promptService = {
   listSystem: (pid: string) => http.get<unknown, SystemPrompt[]>(`/projects/${pid}/system-prompts`),
   createSystem: (pid: string, payload: { name: string; content: string }) =>
     http.post<unknown, SystemPrompt>(`/projects/${pid}/system-prompts`, payload),
+  updateSystem: (
+    id: string,
+    payload: Partial<Pick<SystemPrompt, 'name' | 'content' | 'active'>>,
+  ) => http.put<unknown, SystemPrompt>(`/system-prompts/${id}`, payload),
+  removeSystem: (id: string) => http.delete<unknown, void>(`/system-prompts/${id}`),
   update: (id: string, payload: Partial<PromptTemplate> & Partial<SystemPrompt>) =>
     http.put<unknown, PromptTemplate>(`/prompts/${id}`, payload),
   remove: (id: string) => http.delete<unknown, void>(`/prompts/${id}`),
@@ -154,8 +159,8 @@ export const jobService = {
     payload: {
       name: string
       job_type: string
-      cron_expression?: string
-      interval_seconds?: number
+      cron_expression?: string | null
+      interval_seconds?: number | null
       timezone: string
       enabled: boolean
       content_type?: string
