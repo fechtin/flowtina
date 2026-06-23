@@ -69,33 +69,37 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "sudo SRC=/home/${DEPLOY_USER}/flowtina_src bash /home/${DEPLOY_USER}/flowtina_src/scripts/remote_deploy.sh"
 
-      - name: Verify services and public endpoint
+      - name: Verify services and HTTPS origin
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
-          # remote_deploy.sh only proves the local API answers — confirm every
-          # systemd unit actually stayed up and that HTTPS serves through nginx/CDN.
-          echo "== systemd units =="
+          # remote_deploy.sh only proves the local API answers. Here we confirm
+          # every systemd unit stayed up AND that nginx serves the API over TLS.
+          # The check runs ON the server (curl to 127.0.0.1 with the real Host)
+          # to hit the origin directly — the public CDN 403s datacenter IPs like
+          # the GitHub runner, so a runner-side curl would be a false failure.
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" '
+              set -e
+              echo "== systemd units =="
               fail=0
               for s in flowtina-api flowtina-scheduler nginx; do
                 state="$(systemctl is-active "$s")"
                 printf "%-20s %s\n" "$s" "$state"
                 [ "$state" = active ] || fail=1
               done
-              exit $fail
-            '
+              [ "$fail" = 0 ] || { echo "A service is not active." >&2; exit 1; }
 
-          echo "== public HTTPS health =="
-          for i in $(seq 1 10); do
-            if curl -fsS --max-time 15 https://flowtina.fechtin.com/api/v1/health; then
-              echo
-              echo "Public endpoint healthy."
-              exit 0
-            fi
-            sleep 3
-          done
-          echo "Public HTTPS health check failed." >&2
-          exit 1
+              echo "== HTTPS origin (nginx -> backend) =="
+              for i in $(seq 1 10); do
+                if curl -ksS --max-time 15 https://127.0.0.1/api/v1/health \
+                     -H "Host: flowtina.fechtin.com" | grep -q "\"success\":true"; then
+                  echo "HTTPS origin healthy."
+                  exit 0
+                fi
+                sleep 3
+              done
+              echo "HTTPS origin health check failed." >&2
+              exit 1
+            '

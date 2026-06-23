@@ -19,9 +19,11 @@ import { extractErrorMessage } from '@/services/http'
 import { formatDate } from '@/utils/format'
 import {
   buildCron,
+  currentTimezone,
   defaultSchedule,
   monthNames,
   parseCron,
+  timezoneList,
   weekdayNames,
   type Frequency,
   type ScheduleForm,
@@ -30,6 +32,7 @@ import type { Job, JobHistory, FacebookPage } from '@/types'
 
 const CONTENT_TYPES = ['short_post', 'long_post', 'news', 'seo', 'marketing', 'educational', 'question', 'quote']
 const FREQUENCIES: Frequency[] = ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'interval', 'custom']
+const TIMEZONES = timezoneList()
 
 const { t, locale } = useI18n()
 const toast = useToastStore()
@@ -63,6 +66,10 @@ const schedule = reactive<ScheduleForm>(defaultSchedule())
 
 const weekdays = computed(() => weekdayNames(locale.value))
 const months = computed(() => monthNames(locale.value))
+// Make sure the job's saved timezone always appears, even if not in the browser list.
+const timezones = computed(() =>
+  TIMEZONES.includes(form.timezone) ? TIMEZONES : [form.timezone, ...TIMEZONES],
+)
 
 const columns = [
   { key: 'name', label: t('common.name') },
@@ -113,7 +120,7 @@ function openCreate() {
   editing.value = null
   form.name = ''
   form.job_type = 'generate_content'
-  form.timezone = 'UTC'
+  form.timezone = currentTimezone()
   form.enabled = true
   form.content_type = 'short_post'
   form.language = 'en'
@@ -128,7 +135,7 @@ function openEdit(job: Job) {
   editing.value = job
   form.name = job.name
   form.job_type = job.job_type
-  form.timezone = job.timezone || 'UTC'
+  form.timezone = job.timezone || currentTimezone()
   form.enabled = job.enabled
   form.content_type = job.content_type || 'short_post'
   form.language = job.language || 'en'
@@ -324,7 +331,9 @@ async function doDelete() {
 
         <div v-if="schedule.frequency !== 'interval'">
           <label class="label">{{ t('jobs.timezone') }}</label>
-          <input v-model="form.timezone" class="input" />
+          <select v-model="form.timezone" class="input">
+            <option v-for="tz in timezones" :key="tz" :value="tz">{{ tz }}</option>
+          </select>
         </div>
 
         <div class="grid grid-cols-2 gap-3">

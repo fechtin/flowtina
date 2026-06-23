@@ -87,6 +87,28 @@ export function parseCron(cron: string): ScheduleForm {
   return { ...base, frequency: 'custom', cron }
 }
 
+/** The IANA timezone the user's browser is currently set to (e.g. "Asia/Ho_Chi_Minh"). */
+export function currentTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
+/** Full list of IANA timezones, always including UTC. */
+export function timezoneList(): string[] {
+  try {
+    const zones = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.(
+      'timeZone',
+    )
+    if (zones && zones.length) return zones.includes('UTC') ? zones : ['UTC', ...zones]
+  } catch {
+    // fall through to minimal default
+  }
+  return ['UTC', currentTimezone()]
+}
+
 /** Localized weekday names, index 0 = Sunday. */
 export function weekdayNames(locale: string): string[] {
   const fmt = new Intl.DateTimeFormat(locale, { weekday: 'long' })
