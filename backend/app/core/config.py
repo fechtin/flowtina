@@ -20,7 +20,13 @@ class Settings(BaseSettings):
     """Strongly-typed application settings."""
 
     model_config = SettingsConfigDict(
-        env_file=(BASE_DIR / "config" / ".env", BASE_DIR.parent / "config" / ".env", ".env"),
+        env_file=(
+            BASE_DIR / "config" / ".env",
+            BASE_DIR.parent / "config" / ".env",
+            BASE_DIR.parent / ".env",  # project-root .env (canonical secrets)
+            BASE_DIR / ".env",
+            ".env",
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -93,6 +99,20 @@ class Settings(BaseSettings):
     provider_max_retries: int = 3
     quality_threshold: int = 60
     quality_max_retries: int = 2
+
+    # --- Provider API keys (env fallback for model discovery / connection tests) ---
+    # Used when the dashboard form has no key typed in, so operators can list a
+    # provider's available models without re-entering the secret each time.
+    openai_api_key: str = ""
+    groq_api_key: str = ""
+    gemini_api_key: str = ""
+    deepseek_api_key: str = ""
+    openrouter_api_key: str = ""
+    claude_api_key: str = ""
+
+    def provider_api_key(self, provider: str) -> str:
+        """Return the env-configured API key for ``provider`` (empty if none)."""
+        return str(getattr(self, f"{provider.lower()}_api_key", "") or "")
 
     @property
     def is_production(self) -> bool:

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.common import TimestampedSchema
 
@@ -182,6 +184,28 @@ class TelegramConfigIn(BaseModel):
     bot_token: str = Field(min_length=1)
     chat_id: str = Field(min_length=1, max_length=64)
     enabled: bool = True
+
+    @field_validator("bot_token")
+    @classmethod
+    def _validate_bot_token(cls, value: str) -> str:
+        token = value.strip()
+        if not re.fullmatch(r"\d+:[A-Za-z0-9_-]+", token):
+            raise ValueError(
+                "bot_token must look like 123456789:ABCdef... "
+                "(digits, a colon, then the secret)"
+            )
+        return token
+
+    @field_validator("chat_id")
+    @classmethod
+    def _validate_chat_id(cls, value: str) -> str:
+        chat_id = value.strip()
+        if not re.fullmatch(r"-?\d+", chat_id):
+            raise ValueError(
+                "chat_id must be a numeric Telegram chat ID "
+                "(e.g. 123456789 or -100123456789), not an email"
+            )
+        return chat_id
 
 
 class TelegramConfigOut(TimestampedSchema):

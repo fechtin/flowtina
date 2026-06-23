@@ -16,7 +16,17 @@ const { run } = useAsync()
 
 const loading = ref(false)
 const form = reactive({ bot_token: '', chat_id: '', enabled: false })
+const errors = reactive({ bot_token: '', chat_id: '' })
 const testMessage = ref('Hello from Flowtina')
+
+const BOT_TOKEN_RE = /^\d+:[A-Za-z0-9_-]+$/
+const CHAT_ID_RE = /^-?\d+$/
+
+function validate(): boolean {
+  errors.bot_token = BOT_TOKEN_RE.test(form.bot_token.trim()) ? '' : t('telegram.botTokenInvalid')
+  errors.chat_id = CHAT_ID_RE.test(form.chat_id.trim()) ? '' : t('telegram.chatIdInvalid')
+  return !errors.bot_token && !errors.chat_id
+}
 
 async function load() {
   if (!projectId.value) return
@@ -35,6 +45,7 @@ watch(projectId, load)
 
 async function save() {
   if (!projectId.value) return
+  if (!validate()) return
   await run(
     () => telegramService.saveConfig(projectId.value!, { ...form }),
     { successMessage: t('telegram.configSaved') },
@@ -60,11 +71,28 @@ async function sendTest() {
       <form class="card space-y-4 p-5" @submit.prevent="save">
         <div>
           <label class="label">{{ t('telegram.botToken') }}</label>
-          <input v-model="form.bot_token" type="password" class="input" />
+          <input
+            v-model="form.bot_token"
+            type="password"
+            class="input"
+            :class="{ 'border-red-500 focus:ring-red-500': errors.bot_token }"
+            @input="errors.bot_token = ''"
+          />
+          <p v-if="errors.bot_token" class="mt-1 text-xs text-red-500">{{ errors.bot_token }}</p>
+          <p v-else class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('telegram.botTokenHint') }}</p>
         </div>
         <div>
           <label class="label">{{ t('telegram.chatId') }}</label>
-          <input v-model="form.chat_id" class="input" />
+          <input
+            v-model="form.chat_id"
+            inputmode="numeric"
+            placeholder="123456789"
+            class="input"
+            :class="{ 'border-red-500 focus:ring-red-500': errors.chat_id }"
+            @input="errors.chat_id = ''"
+          />
+          <p v-if="errors.chat_id" class="mt-1 text-xs text-red-500">{{ errors.chat_id }}</p>
+          <p v-else class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('telegram.chatIdHint') }}</p>
         </div>
         <div class="flex items-center justify-between">
           <span class="label mb-0">{{ t('common.enabled') }}</span>

@@ -40,6 +40,7 @@ export interface Project {
 
 export type ProviderType =
   | 'openai'
+  | 'groq'
   | 'gemini'
   | 'claude'
   | 'openrouter'

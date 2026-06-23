@@ -25,6 +25,20 @@ class OpenAICompatibleProvider(BaseAIProvider):
         messages.append({"role": "user", "content": prompt})
         return messages
 
+    async def list_models(self) -> list[str]:
+        url = f"{self._resolve_base_url()}/models"
+        headers = {"Content-Type": "application/json"}
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        data = await self._get_json(url, headers)
+        items = data.get("data") or data.get("models") or []
+        ids = [
+            str(m.get("id") or m.get("name"))
+            for m in items
+            if isinstance(m, dict) and (m.get("id") or m.get("name"))
+        ]
+        return sorted(set(ids))
+
     async def generate(self, prompt: str) -> GenerationResult:
         url = f"{self._resolve_base_url()}/chat/completions"
         headers = {"Content-Type": "application/json"}
@@ -60,6 +74,11 @@ class OpenAIProvider(OpenAICompatibleProvider):
 class DeepSeekProvider(OpenAICompatibleProvider):
     name = "deepseek"
     default_base_url = "https://api.deepseek.com/v1"
+
+
+class GroqProvider(OpenAICompatibleProvider):
+    name = "groq"
+    default_base_url = "https://api.groq.com/openai/v1"
 
 
 class OpenRouterProvider(OpenAICompatibleProvider):

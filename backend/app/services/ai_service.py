@@ -6,6 +6,7 @@ import time
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.exceptions import ProviderException
 from app.core.logger import get_logger
 from app.core.security import decrypt_secret
@@ -13,7 +14,11 @@ from app.models.project import AIProvider
 from app.providers.base import GenerationResult, ProviderConfig
 from app.providers.factory import AIProviderFactory
 from app.repositories.repositories import AIProviderRepository, AIUsageLogRepository
-from app.schemas.project import ProviderTestRequest, ProviderTestResult
+from app.schemas.project import (
+    ProviderModelsRequest,
+    ProviderTestRequest,
+    ProviderTestResult,
+)
 from app.utils.retry import retry_async
 
 log = get_logger("ai")
@@ -88,12 +93,30 @@ class AIService:
         )
 
     @staticmethod
+    def _resolve_api_key(provider: str, api_key: str | None) -> str | None:
+        """Use the typed-in key, falling back to the env-configured one."""
+        return api_key or settings.provider_api_key(provider) or None
+
+    @staticmethod
+    async def list_models(payload: ProviderModelsRequest) -> list[str]:
+        """List the models a provider exposes (no persistence)."""
+        config = ProviderConfig(
+            provider=payload.provider,
+            model="",
+            api_key=AIService._resolve_api_key(payload.provider, payload.api_key),
+            base_url=payload.base_url,
+            timeout_seconds=30,
+        )
+        client = AIProviderFactory.create(config)
+        return await client.list_models()
+
+    @staticmethod
     async def test_connection(payload: ProviderTestRequest) -> ProviderTestResult:
         """One-shot connectivity test for a provider config (no persistence)."""
         config = ProviderConfig(
             provider=payload.provider,
             model=payload.model,
-            api_key=payload.api_key,
+            api_key=AIService._resolve_api_key(payload.provider, payload.api_key),
             base_url=payload.base_url,
             max_tokens=32,
             timeout_seconds=30,

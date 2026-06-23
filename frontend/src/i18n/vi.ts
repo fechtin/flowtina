@@ -31,6 +31,7 @@ export default {
     retry: 'Thử lại',
     runNow: 'Chạy ngay',
     search: 'Tìm kiếm',
+    help: 'Trợ giúp',
     loading: 'Đang tải...',
     noData: 'Chưa có dữ liệu',
     actions: 'Thao tác',
@@ -107,6 +108,8 @@ export default {
     maxTokens: 'Token tối đa',
     timeout: 'Thời gian chờ (giây)',
     systemPrompt: 'Lời nhắc hệ thống',
+    fetchModels: 'Tải mô hình',
+    noModels: 'Không có mô hình nào. Kiểm tra khóa API hoặc URL gốc.',
     testConnection: 'Kiểm tra kết nối',
     testPrompt: 'Lời nhắc kiểm tra',
     testSuccess: 'Kết nối thành công',
@@ -140,6 +143,10 @@ export default {
     keyword: 'Từ khóa',
     syncNow: 'Đồng bộ ngay',
     synced: 'Đã đồng bộ {count} mục',
+    topicsHelp:
+      'Chủ đề là nguồn để tạo nội dung: khi sinh bài viết, AI sẽ viết về các chủ đề đang bật. Con số là độ ưu tiên — chủ đề có số lớn hơn được chọn trước.',
+    keywordsHelp:
+      'Từ khóa dùng để lọc/tìm các bài viết đã có theo nội dung, không dùng để sinh bài mới. Con số là độ ưu tiên dùng khi sắp xếp.',
   },
   jobs: {
     title: 'Tác vụ định kỳ',
@@ -213,7 +220,11 @@ export default {
   telegram: {
     title: 'Telegram',
     botToken: 'Token bot',
+    botTokenHint: 'Tạo bot bằng @BotFather trên Telegram rồi dán token vào đây (ví dụ: 123456789:ABCdef...).',
     chatId: 'ID trò chuyện',
+    chatIdHint: 'ID dạng số của cuộc trò chuyện sẽ nhận tin nhắn — không phải email. Nhắn @userinfobot để lấy ID cá nhân, hoặc thêm bot vào nhóm và dùng @getidsbot. ID nhóm bắt đầu bằng dấu -.',
+    botTokenInvalid: 'Token bot phải có dạng 123456789:ABCdef... (dãy số, dấu hai chấm, rồi tới phần bí mật).',
+    chatIdInvalid: 'Chat ID phải là số (ví dụ 123456789 hoặc -100123456789), không phải email.',
     sendTest: 'Gửi tin nhắn thử',
     testMessage: 'Tin nhắn thử',
     sent: 'Đã gửi tin nhắn thử',

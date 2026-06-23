@@ -96,6 +96,12 @@ class ProviderTestResult(BaseModel):
     error: str | None = None
 
 
+class ProviderModelsRequest(BaseModel):
+    provider: str = "openai"
+    base_url: str | None = None
+    api_key: str | None = None
+
+
 # --- Prompts ---
 
 

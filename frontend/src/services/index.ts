@@ -63,6 +63,8 @@ export const providerService = {
     model: string
     prompt: string
   }) => http.post<unknown, ProviderTestResult>('/providers/test', payload),
+  listModels: (payload: { provider: string; base_url?: string; api_key?: string }) =>
+    http.post<unknown, string[]>('/providers/models', payload),
 }
 
 // ---------- Prompts ----------

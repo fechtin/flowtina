@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Pencil, Trash2, Zap, Loader2 } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, Zap, Loader2, RefreshCw } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -23,6 +23,7 @@ const { loading: saving, run } = useAsync()
 
 const PROVIDER_TYPES: ProviderType[] = [
   'openai',
+  'groq',
   'gemini',
   'claude',
   'openrouter',
@@ -32,6 +33,37 @@ const PROVIDER_TYPES: ProviderType[] = [
   'vllm',
   'custom',
 ]
+
+// Suggested models per provider. The model field stays editable (datalist), so
+// providers with arbitrary model names (ollama, vllm, custom) still accept any value.
+const MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o3-mini'],
+  groq: [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'mixtral-8x7b-32768',
+    'gemma2-9b-it',
+  ],
+  gemini: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  claude: [
+    'claude-sonnet-4-20250514',
+    'claude-3-5-sonnet-latest',
+    'claude-3-5-haiku-latest',
+  ],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+}
+
+// Models fetched live from the provider's API (e.g. Groq via its key). When
+// present they take precedence over the static presets above.
+const dynamicModels = ref<string[]>([])
+const loadingModels = ref(false)
+
+const availableModels = computed<string[]>(() => {
+  const base = dynamicModels.value.length ? dynamicModels.value : MODEL_PRESETS[form.provider] ?? []
+  // Keep the currently-selected model visible even if the API didn't list it.
+  if (form.model && !base.includes(form.model)) return [form.model, ...base]
+  return base
+})
 
 const loading = ref(false)
 const providers = ref<Provider[]>([])
@@ -92,12 +124,43 @@ function resetForm() {
   existingMask.value = null
   testResult.value = null
   testPrompt.value = 'Hello, respond with a short greeting.'
+  dynamicModels.value = []
 }
+
+// Discover the provider's available models. `silent` skips the empty/no-key
+// toast so it can run automatically when the form opens or the provider changes.
+async function fetchModels(silent = false) {
+  loadingModels.value = true
+  try {
+    const models = await providerService.listModels({
+      provider: form.provider,
+      base_url: form.base_url?.trim() || undefined,
+      api_key: form.api_key?.trim() || undefined,
+    })
+    dynamicModels.value = models
+    if (models.length && !models.includes(form.model)) form.model = models[0]
+    if (!models.length && !silent) toast.error(t('providers.noModels'))
+  } catch (err) {
+    if (!silent) toast.error(extractErrorMessage(err))
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+// Reset discovered models when switching provider, then try to auto-load them.
+watch(
+  () => form.provider,
+  () => {
+    dynamicModels.value = []
+    if (showForm.value) fetchModels(true)
+  },
+)
 
 function openCreate() {
   editing.value = null
   resetForm()
   showForm.value = true
+  fetchModels(true)
 }
 
 function openEdit(p: Provider) {
@@ -117,6 +180,7 @@ function openEdit(p: Provider) {
   form.grounding_enabled = p.grounding_enabled ?? false
   existingMask.value = p.api_key_masked ?? null
   showForm.value = true
+  fetchModels(true)
 }
 
 function buildPayload(): ProviderPayload {
@@ -258,14 +322,39 @@ async function runTest() {
             </select>
           </div>
           <div>
-            <label class="label">{{ t('providers.model') }}</label>
-            <input v-model="form.model" required class="input" />
+            <div class="flex items-center justify-between">
+              <label class="label">{{ t('providers.model') }}</label>
+              <button
+                type="button"
+                class="flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline disabled:opacity-50 dark:text-primary-400"
+                :disabled="loadingModels"
+                @click="fetchModels(false)"
+              >
+                <component :is="loadingModels ? Loader2 : RefreshCw" class="h-3 w-3" :class="loadingModels ? 'animate-spin' : ''" />
+                {{ t('providers.fetchModels') }}
+              </button>
+            </div>
+            <select v-if="availableModels.length" v-model="form.model" required class="input">
+              <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <input
+              v-else
+              v-model="form.model"
+              required
+              class="input"
+              autocomplete="off"
+            />
           </div>
         </div>
 
         <div>
           <label class="label">{{ t('providers.baseUrl') }} ({{ t('common.optional') }})</label>
-          <input v-model="form.base_url" class="input" placeholder="https://..." />
+          <input
+            v-model="form.base_url"
+            class="input"
+            placeholder="https://..."
+            autocomplete="off"
+          />
         </div>
 
         <div>
@@ -275,6 +364,7 @@ async function runTest() {
             type="password"
             class="input"
             :placeholder="existingMask || ''"
+            autocomplete="new-password"
           />
         </div>
 

@@ -13,6 +13,7 @@ from app.providers.gemini import GeminiProvider
 from app.providers.openai_compatible import (
     CustomProvider,
     DeepSeekProvider,
+    GroqProvider,
     LMStudioProvider,
     OllamaProvider,
     OpenAIProvider,
@@ -22,6 +23,7 @@ from app.providers.openai_compatible import (
 
 _REGISTRY: dict[str, type[BaseAIProvider]] = {
     "openai": OpenAIProvider,
+    "groq": GroqProvider,
     "deepseek": DeepSeekProvider,
     "openrouter": OpenRouterProvider,
     "ollama": OllamaProvider,
@@ -35,6 +37,7 @@ _REGISTRY: dict[str, type[BaseAIProvider]] = {
 # Approximate blended cost per 1K total tokens (USD). Local providers are free.
 _COST_PER_1K: dict[str, float] = {
     "openai": 0.0025,
+    "groq": 0.0006,
     "claude": 0.006,
     "gemini": 0.0007,
     "deepseek": 0.00027,

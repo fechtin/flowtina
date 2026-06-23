@@ -15,6 +15,7 @@ from app.schemas.project import (
     ProjectOut,
     ProjectUpdate,
     ProviderCreate,
+    ProviderModelsRequest,
     ProviderTestRequest,
     ProviderUpdate,
 )
@@ -110,3 +111,11 @@ async def test_provider(
 ):
     result = await AIService.test_connection(payload)
     return ok(result.model_dump())
+
+
+@router.post("/providers/models")
+async def list_provider_models(
+    payload: ProviderModelsRequest, user: User = Depends(get_current_user)
+):
+    models = await AIService.list_models(payload)
+    return ok(models)

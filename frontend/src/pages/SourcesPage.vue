@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, RefreshCw } from 'lucide-vue-next'
+import { Plus, Trash2, RefreshCw, HelpCircle } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
@@ -22,6 +22,7 @@ type Tab = 'rss' | 'topics' | 'keywords'
 const tab = ref<Tab>('rss')
 
 const loading = ref(false)
+const showHelp = ref(false)
 const rss = ref<RssSource[]>([])
 const topics = ref<Topic[]>([])
 const keywords = ref<Keyword[]>([])
@@ -52,6 +53,9 @@ async function load() {
 
 onMounted(load)
 watch(projectId, load)
+watch(tab, () => {
+  showHelp.value = false
+})
 
 async function sync() {
   if (!projectId.value) return
@@ -176,6 +180,22 @@ const tabs: { key: Tab; label: string }[] = [
 
       <!-- Topics -->
       <div v-else-if="tab === 'topics'">
+        <div class="mb-2 flex justify-end">
+          <button
+            type="button"
+            class="btn-ghost text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
+            :title="t('common.help')"
+            @click="showHelp = !showHelp"
+          >
+            <HelpCircle class="h-4 w-4" />
+          </button>
+        </div>
+        <div
+          v-if="showHelp"
+          class="mb-4 rounded-lg border border-primary-100 bg-primary-50 px-4 py-3 text-sm text-gray-600 dark:border-primary-900 dark:bg-primary-950/40 dark:text-gray-300"
+        >
+          {{ t('sources.topicsHelp') }}
+        </div>
         <form class="mb-4 flex gap-2" @submit.prevent="addTopic">
           <input v-model="topicForm.topic" :placeholder="t('sources.topic')" required class="input flex-1" />
           <input
@@ -207,6 +227,22 @@ const tabs: { key: Tab; label: string }[] = [
 
       <!-- Keywords -->
       <div v-else>
+        <div class="mb-2 flex justify-end">
+          <button
+            type="button"
+            class="btn-ghost text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
+            :title="t('common.help')"
+            @click="showHelp = !showHelp"
+          >
+            <HelpCircle class="h-4 w-4" />
+          </button>
+        </div>
+        <div
+          v-if="showHelp"
+          class="mb-4 rounded-lg border border-primary-100 bg-primary-50 px-4 py-3 text-sm text-gray-600 dark:border-primary-900 dark:bg-primary-950/40 dark:text-gray-300"
+        >
+          {{ t('sources.keywordsHelp') }}
+        </div>
         <form class="mb-4 flex gap-2" @submit.prevent="addKeyword">
           <input v-model="keywordForm.keyword" :placeholder="t('sources.keyword')" required class="input flex-1" />
           <input

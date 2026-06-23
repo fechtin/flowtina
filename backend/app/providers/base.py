@@ -50,7 +50,25 @@ class BaseAIProvider:
     async def generate(self, prompt: str) -> GenerationResult:  # pragma: no cover - interface
         raise NotImplementedError
 
+    async def list_models(self) -> list[str]:
+        """Return the model ids this provider exposes. Override where supported."""
+        raise ProviderException(f"{self.name} does not support listing models")
+
     # Shared HTTP helper used by concrete providers.
+    async def _get_json(self, url: str, headers: dict) -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
+                resp = await client.get(url, headers=headers)
+            if resp.status_code >= 400:
+                raise ProviderException(
+                    f"{self.name} HTTP {resp.status_code}: {resp.text[:300]}"
+                )
+            return resp.json()
+        except httpx.TimeoutException as exc:
+            raise ProviderException(f"{self.name} request timed out") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderException(f"{self.name} request failed: {exc}") from exc
+
     async def _post_json(self, url: str, headers: dict, payload: dict) -> dict:
         try:
             async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:

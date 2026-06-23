@@ -31,6 +31,7 @@ export default {
     retry: 'Retry',
     runNow: 'Run now',
     search: 'Search',
+    help: 'Help',
     loading: 'Loading...',
     noData: 'No data yet',
     actions: 'Actions',
@@ -107,6 +108,8 @@ export default {
     maxTokens: 'Max tokens',
     timeout: 'Timeout (seconds)',
     systemPrompt: 'System prompt',
+    fetchModels: 'Fetch models',
+    noModels: 'No models returned. Check the API key or base URL.',
     testConnection: 'Test connection',
     testPrompt: 'Test prompt',
     testSuccess: 'Connection successful',
@@ -140,6 +143,10 @@ export default {
     keyword: 'Keyword',
     syncNow: 'Sync now',
     synced: 'Synced {count} items',
+    topicsHelp:
+      'Topics are content sources: when generating a post the AI writes about your active topics. The number is the priority — topics with a higher number are picked first.',
+    keywordsHelp:
+      'Keywords are filters for searching existing posts by their content; they are not used to generate new posts. The number is the priority used when ordering them.',
   },
   jobs: {
     title: 'Scheduled Jobs',
@@ -213,7 +220,11 @@ export default {
   telegram: {
     title: 'Telegram',
     botToken: 'Bot token',
+    botTokenHint: 'Create a bot with @BotFather on Telegram and paste the token here (e.g. 123456789:ABCdef...).',
     chatId: 'Chat ID',
+    chatIdHint: 'Numeric ID of the chat to receive messages — not an email. Message @userinfobot to get your personal ID, or add the bot to a group and use @getidsbot. Group IDs start with -.',
+    botTokenInvalid: 'Bot token must look like 123456789:ABCdef... (digits, a colon, then the secret).',
+    chatIdInvalid: 'Chat ID must be a number (e.g. 123456789 or -100123456789), not an email.',
     sendTest: 'Send test message',
     testMessage: 'Test message',
     sent: 'Test message sent',
