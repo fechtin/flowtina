@@ -145,10 +145,10 @@ def test_facebook_comment_engagement(client, auth_headers, project, monkeypatch)
     from app.providers.base import GenerationResult
     from app.services.facebook_engagement_service import FacebookEngagementService
 
-    async def fake_graph(url, data):
-        return {"id": "fb_post_123"}
+    async def fake_posts(self, page_id, token):
+        return [{"id": "fb_post_123", "message": "Our latest post"}]
 
-    async def fake_fetch(self, fb_post_id, token):
+    async def fake_fetch(self, post_id, token):
         return [{"id": "c1", "message": "Great post!", "from": {"id": "999", "name": "Fan"}}]
 
     liked: list[str] = []
@@ -163,7 +163,7 @@ def test_facebook_comment_engagement(client, auth_headers, project, monkeypatch)
     async def fake_generate(self, project_id, prompt):
         return GenerationResult(text="Thank you so much!", model="test")
 
-    monkeypatch.setattr("app.services.facebook_service.FacebookService._call_graph", staticmethod(fake_graph))
+    monkeypatch.setattr(FacebookEngagementService, "_fetch_recent_posts", fake_posts)
     monkeypatch.setattr(FacebookEngagementService, "_fetch_comments", fake_fetch)
     monkeypatch.setattr(FacebookEngagementService, "_like_comment", fake_like)
     monkeypatch.setattr(FacebookEngagementService, "_reply_comment", fake_reply)
@@ -174,12 +174,6 @@ def test_facebook_comment_engagement(client, auth_headers, project, monkeypatch)
         json={"page_name": "My Page", "page_id": "111", "access_token": "tok"},
         headers=auth_headers,
     ).json()["data"]
-    post = client.post(
-        f"/api/v1/projects/{project}/posts",
-        json={"content": "Hello Facebook from Flowtina engagement test content."},
-        headers=auth_headers,
-    ).json()["data"]
-    client.post(f"/api/v1/posts/{post['id']}/publish?page_id={page['id']}", headers=auth_headers)
 
     # Enable auto-like + auto-reply for the page.
     upd = client.patch(
