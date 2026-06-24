@@ -9,6 +9,10 @@ const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const ACCESS_KEY = 'flowtina_access_token'
 const REFRESH_KEY = 'flowtina_refresh_token'
 
+// Refresh the access token this many seconds before it actually expires so a
+// request is never sent with an already-dead token.
+const EXPIRY_SKEW_SECONDS = 30
+
 export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_KEY)
 }
@@ -32,24 +36,8 @@ export const http: AxiosInstance = axios.create({
 // Bare client for token refresh to avoid interceptor recursion.
 const refreshClient: AxiosInstance = axios.create({ baseURL })
 
-http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = getAccessToken()
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
 interface RetriableConfig extends AxiosRequestConfig {
   _retry?: boolean
-}
-
-let isRefreshing = false
-let pendingQueue: Array<(token: string | null) => void> = []
-
-function flushQueue(token: string | null): void {
-  pendingQueue.forEach((cb) => cb(token))
-  pendingQueue = []
 }
 
 function onAuthFailure(): void {
@@ -58,6 +46,58 @@ function onAuthFailure(): void {
     window.location.href = '/login'
   }
 }
+
+// Read the `exp` claim from a JWT without verifying the signature.
+function getTokenExpiry(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return typeof payload.exp === 'number' ? payload.exp : null
+  } catch {
+    return null
+  }
+}
+
+function isExpiringSoon(token: string): boolean {
+  const exp = getTokenExpiry(token)
+  if (exp === null) return false
+  return Date.now() / 1000 >= exp - EXPIRY_SKEW_SECONDS
+}
+
+// A single in-flight refresh shared by every caller so concurrent requests
+// trigger at most one /auth/refresh and never reuse a rotated refresh token.
+let refreshPromise: Promise<string | null> | null = null
+
+function refreshTokens(): Promise<string | null> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return Promise.resolve(null)
+
+  if (!refreshPromise) {
+    refreshPromise = refreshClient
+      .post('/auth/refresh', { refresh_token: refreshToken })
+      .then((resp) => {
+        const data = resp.data?.data ?? resp.data
+        setTokens(data.access_token, data.refresh_token)
+        return data.access_token as string
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
+http.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  let token = getAccessToken()
+  // Proactively refresh before the token expires so no request ever 401s.
+  if (token && isExpiringSoon(token)) {
+    token = (await refreshTokens()) ?? token
+  }
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
 
 http.interceptors.response.use(
   (response) => {
@@ -72,46 +112,16 @@ http.interceptors.response.use(
     const original = error.config as RetriableConfig
     const status = error.response?.status
 
+    // Reactive fallback: token was accepted as valid but the server rejected it
+    // (e.g. revoked, clock skew). Refresh once and retry the original request.
     if (status === 401 && original && !original._retry) {
-      const refreshToken = getRefreshToken()
-      if (!refreshToken) {
-        onAuthFailure()
-        return Promise.reject(error)
-      }
       original._retry = true
-
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          pendingQueue.push((token) => {
-            if (token) {
-              original.headers = { ...original.headers, Authorization: `Bearer ${token}` }
-              resolve(http(original))
-            } else {
-              reject(error)
-            }
-          })
-        })
-      }
-
-      isRefreshing = true
-      try {
-        const resp = await refreshClient.post('/auth/refresh', {
-          refresh_token: refreshToken,
-        })
-        const data = resp.data?.data ?? resp.data
-        const newAccess: string = data.access_token
-        const newRefresh: string = data.refresh_token
-        setTokens(newAccess, newRefresh)
-        flushQueue(newAccess)
-        original.headers = { ...original.headers, Authorization: `Bearer ${newAccess}` }
+      const newToken = await refreshTokens()
+      if (newToken) {
+        original.headers = { ...original.headers, Authorization: `Bearer ${newToken}` }
         return http(original)
-      } catch (refreshErr) {
-        flushQueue(null)
-        onAuthFailure()
-        return Promise.reject(refreshErr)
-      } finally {
-        isRefreshing = false
       }
+      onAuthFailure()
     }
 
     return Promise.reject(error)
