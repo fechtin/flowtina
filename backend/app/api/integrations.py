@@ -122,8 +122,17 @@ async def engage_now(
     page = svc.pages.get(page_id)
     if not page:
         raise NotFoundException("Facebook page not found")
-    processed = await svc.engage_page(page)
-    return ok({"processed": processed}, f"Processed {processed} new comment(s)")
+    result = await svc.engage_page(page)
+    # Every scanned post failing to load almost always means the page token is
+    # missing pages_read_engagement / pages_manage_engagement — surface that.
+    if result["scanned"] and result["skipped"] == result["scanned"]:
+        message = (
+            "Could not read comments. Check the page token has "
+            "pages_read_engagement and pages_manage_engagement."
+        )
+    else:
+        message = f"Processed {result['processed']} new comment(s)"
+    return ok(result, message)
 
 
 # --- Telegram ---

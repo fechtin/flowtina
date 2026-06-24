@@ -82,15 +82,17 @@ class FacebookEngagementService:
         total = 0
         for page in pages:
             try:
-                total += await self.engage_page(page)
+                total += (await self.engage_page(page))["processed"]
             except Exception as exc:  # noqa: BLE001 - one bad page must not stop others
                 log.error(f"Engagement failed for page {page.page_id}: {exc}")
         return total
 
-    async def engage_page(self, page: FacebookPage) -> int:
+    async def engage_page(self, page: FacebookPage) -> dict[str, int]:
         """Scan a page's recent posts and act on any unseen comments.
 
-        Returns the number of newly processed comments.
+        Returns ``{processed, scanned, skipped}``: comments newly acted on, posts
+        scanned, and posts skipped because their comments could not be read
+        (deleted post, or a token lacking pages_read_engagement).
         """
         token = decrypt_secret(page.access_token_encrypted)
         recent = [
@@ -102,17 +104,27 @@ class FacebookEngagementService:
         ][: settings.facebook_engage_max_posts]
 
         processed = 0
+        skipped = 0
         for fb_post in recent:
             fb_post_id = fb_post.facebook_post_id
             if not fb_post_id:
                 continue
-            comments = await self._fetch_comments(fb_post_id, token)
+            # A single inaccessible post (deleted, or token missing
+            # pages_read_engagement) must not abort the whole page run.
+            try:
+                comments = await self._fetch_comments(fb_post_id, token)
+            except FacebookException as exc:
+                skipped += 1
+                log.warning(
+                    f"Skipping post {fb_post_id} on page {page.page_id}: {exc}"
+                )
+                continue
             for comment in comments:
                 if await self._process_comment(page, fb_post, comment, token):
                     processed += 1
         if processed:
             log.info(f"Engaged with {processed} new comment(s) on page {page.page_id}")
-        return processed
+        return {"processed": processed, "scanned": len(recent), "skipped": skipped}
 
     async def _process_comment(
         self, page: FacebookPage, fb_post, comment: dict, token: str
