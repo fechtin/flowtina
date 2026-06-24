@@ -120,6 +120,27 @@ def test_facebook_connect_and_publish(client, auth_headers, project, monkeypatch
     assert pub.json()["data"]["facebook_post_id"] == "fb_post_123"
 
 
+def test_facebook_connect_page_upserts_token(client, auth_headers, project):
+    body = {"page_name": "My Page", "page_id": "777", "access_token": "tok1"}
+    first = client.post(
+        f"/api/v1/projects/{project}/facebook/pages", json=body, headers=auth_headers
+    ).json()["data"]
+
+    # Re-connecting the same page_id with a fresh token updates in place.
+    body["page_name"] = "Renamed Page"
+    body["access_token"] = "tok2"
+    second = client.post(
+        f"/api/v1/projects/{project}/facebook/pages", json=body, headers=auth_headers
+    ).json()["data"]
+
+    assert second["id"] == first["id"]
+    assert second["page_name"] == "Renamed Page"
+    pages = client.get(
+        f"/api/v1/projects/{project}/facebook/pages", headers=auth_headers
+    ).json()["data"]
+    assert len([p for p in pages if p["page_id"] == "777"]) == 1
+
+
 def test_facebook_comment_engagement(client, auth_headers, project, monkeypatch):
     from app.providers.base import GenerationResult
     from app.services.facebook_engagement_service import FacebookEngagementService

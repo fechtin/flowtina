@@ -51,12 +51,24 @@ class FacebookService:
     def connect_page(
         self, project_id: str, payload: FacebookPageCreate
     ) -> FacebookPage:
-        page = self.pages.create(
-            project_id=project_id,
-            page_name=payload.page_name,
-            page_id=payload.page_id,
-            access_token_encrypted=encrypt_secret(payload.access_token),
-        )
+        """Connect a page, or refresh its token if already connected.
+
+        Upsert by (project_id, page_id) so re-entering the form with a new token
+        updates the existing page in place instead of creating a duplicate.
+        """
+        existing = self.pages.get_by(project_id=project_id, page_id=payload.page_id)
+        if existing:
+            existing.page_name = payload.page_name
+            existing.access_token_encrypted = encrypt_secret(payload.access_token)
+            existing.status = "healthy"
+            page = existing
+        else:
+            page = self.pages.create(
+                project_id=project_id,
+                page_name=payload.page_name,
+                page_id=payload.page_id,
+                access_token_encrypted=encrypt_secret(payload.access_token),
+            )
         self.db.commit()
         self.db.refresh(page)
         return page
