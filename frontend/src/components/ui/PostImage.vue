@@ -16,8 +16,10 @@ const props = withDefaults(
     imageUrl?: string | null
     hasUploadedImage?: boolean
     imgClass?: string
+    /** Drop the default rounded border so the image can sit flush (e.g. a Facebook card). */
+    bare?: boolean
   }>(),
-  { imageUrl: null, hasUploadedImage: false, imgClass: '' },
+  { imageUrl: null, hasUploadedImage: false, imgClass: '', bare: false },
 )
 
 const objectUrl = ref<string | null>(null)
@@ -78,8 +80,7 @@ onBeforeUnmount(revoke)
       v-else
       :src="src"
       alt=""
-      class="rounded-lg border border-gray-200 dark:border-gray-700"
-      :class="imgClass"
+      :class="[bare ? '' : 'rounded-lg border border-gray-200 dark:border-gray-700', imgClass]"
       @error="failed = true"
     />
   </div>

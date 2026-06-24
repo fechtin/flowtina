@@ -153,6 +153,7 @@ export interface Post {
   created_by_ai: boolean
   version: number
   error_message?: string | null
+  facebook_page_id?: string | null
   image_url?: string | null
   has_uploaded_image?: boolean
   created_at: string

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Plus,
@@ -21,6 +21,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import PostImage from '@/components/ui/PostImage.vue'
+import FacebookPostPreview from '@/components/ui/FacebookPostPreview.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import NoProjectNotice from '@/components/ui/NoProjectNotice.vue'
 import { postService, facebookService } from '@/services'
@@ -33,7 +34,7 @@ import type { FacebookPage, Post, PostStatus } from '@/types'
 
 const { t } = useI18n()
 const toast = useToastStore()
-const { projectId, hasProject } = useCurrentProject()
+const { projectId, hasProject, projectStore } = useCurrentProject()
 const { loading: mutating, run } = useAsync()
 
 const STATUS_TABS: PostStatus[] = ['draft', 'pending_approval', 'scheduled', 'published', 'failed']
@@ -51,6 +52,16 @@ function openPreview(p: Post) {
   previewing.value = p
   showPreview.value = true
 }
+
+// The Facebook page the post targets, falling back to the project's brand name.
+const previewPageName = computed(() => {
+  const post = previewing.value
+  if (!post) return ''
+  const page = post.facebook_page_id
+    ? pages.value.find((pg) => pg.page_id === post.facebook_page_id)
+    : undefined
+  return page?.page_name || projectStore.currentProject?.name || ''
+})
 
 // Create / edit modal
 const showForm = ref(false)
@@ -405,23 +416,16 @@ watch(projectId, () => {
             <Bot class="h-3 w-3" /> {{ t('posts.aiGenerated') }}
           </span>
         </div>
-        <PostImage
-          :post-id="previewing.id"
-          :image-url="previewing.image_url"
-          :has-uploaded-image="previewing.has_uploaded_image"
-          img-class="max-h-72 w-full object-contain"
-        />
-        <p class="max-h-[55vh] overflow-y-auto whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-200">
-          {{ previewing.content }}
-        </p>
-        <div v-if="hashtagList(previewing.hashtags).length" class="flex flex-wrap gap-1">
-          <span
-            v-for="tag in hashtagList(previewing.hashtags)"
-            :key="tag"
-            class="badge bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300"
-          >
-            {{ tag }}
-          </span>
+        <div class="max-h-[60vh] overflow-y-auto rounded-xl bg-gray-100 p-3 dark:bg-gray-800/40">
+          <p class="mb-2 px-1 text-xs text-gray-400">{{ t('posts.fbPreviewHint') }}</p>
+          <FacebookPostPreview
+            :post-id="previewing.id"
+            :content="previewing.content"
+            :hashtags="previewing.hashtags"
+            :image-url="previewing.image_url"
+            :has-uploaded-image="previewing.has_uploaded_image"
+            :page-name="previewPageName"
+          />
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" class="btn-secondary" @click="showPreview = false">{{ t('common.close') }}</button>
