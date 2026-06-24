@@ -17,7 +17,12 @@ from app.core.exceptions import AuthenticationException, ProviderException
 from app.prompts.engine import PromptEngine, prompt_engine
 from app.providers.base import ProviderConfig
 from app.providers.factory import AIProviderFactory
-from app.utils.text import content_hash, normalize_hashtags, score_quality
+from app.utils.text import (
+    content_hash,
+    normalize_hashtags,
+    score_quality,
+    strip_markdown,
+)
 
 
 def test_password_hash_roundtrip():
@@ -76,6 +81,21 @@ def test_content_hash_stable():
 
 def test_normalize_hashtags_dedup():
     assert normalize_hashtags("#AI #ai #ML extra #AI") == "#ai #ml"
+
+
+def test_strip_markdown_flattens_formatting():
+    assert strip_markdown("**Bold** and *italic*") == "Bold and italic"
+    assert strip_markdown("# Heading\nBody") == "Heading\nBody"
+    assert strip_markdown("Before\n\n---\n\nAfter") == "Before\n\nAfter"
+    assert strip_markdown("See [site](https://x.io)") == "See site (https://x.io)"
+    assert strip_markdown("Run `pip install`") == "Run pip install"
+
+
+def test_strip_markdown_preserves_non_markdown():
+    # snake_case, URLs, math and hashtags must survive untouched.
+    assert strip_markdown("field image_url stays") == "field image_url stays"
+    assert strip_markdown("area = 2 * 3 * 4") == "area = 2 * 3 * 4"
+    assert strip_markdown("#brand and #growth") == "#brand and #growth"
 
 
 def test_score_quality_bounds():

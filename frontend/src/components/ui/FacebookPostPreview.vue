@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Globe, MessageCircle, MoreHorizontal, Share2, ThumbsUp } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import PostImage from '@/components/ui/PostImage.vue'
+import { stripMarkdown } from '@/utils/markdown'
 
 /**
  * Renders a post the way it will actually appear once published to Facebook.
@@ -42,9 +43,10 @@ const initials = computed(() =>
     .join(''),
 )
 
-// Mirror backend _compose_message: content, blank line, then hashtags.
+// Mirror backend _compose_message: Markdown-stripped content (Facebook renders
+// none), a blank line, then the hashtags string untouched.
 const message = computed(() => {
-  const parts = [props.content?.trim() ?? '']
+  const parts = [stripMarkdown(props.content)]
   if (props.hashtags?.trim()) parts.push(props.hashtags.trim())
   return parts.filter(Boolean).join('\n\n')
 })

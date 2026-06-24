@@ -22,6 +22,20 @@ _EMOJI_RE = re.compile(
     flags=re.UNICODE,
 )
 
+# --- Markdown stripping (Facebook renders plain text only) ---
+_CODE_FENCE_RE = re.compile(r"^\s*```[^\n]*$", flags=re.MULTILINE)
+_INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+# A horizontal rule: a line of 3+ repeats of -, * or _ (optionally spaced).
+_HR_RE = re.compile(r"^\s{0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$", flags=re.MULTILINE)
+# ATX heading marker; requires whitespace after the #'s so "#hashtag" survives.
+_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}[ \t]+", flags=re.MULTILINE)
+_BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>[ \t]?", flags=re.MULTILINE)
+_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
+# Emphasis: *, ** or *** wrapping non-space-bounded text (protects "2 * 3" and "* bullet").
+_ASTERISK_EMPHASIS_RE = re.compile(r"(\*{1,3})(\S(?:.*?\S)?)\1")
+# Bold via double underscore; single _ is left alone to spare snake_case and URLs.
+_UNDERSCORE_BOLD_RE = re.compile(r"__(\S(?:.*?\S)?)__")
+
 
 def content_hash(text: str) -> str:
     """SHA-256 hash of normalized content for deduplication."""
@@ -49,6 +63,35 @@ def clean_content(text: str) -> str:
     text = _MULTISPACE_RE.sub(" ", text)
     text = _MULTINEWLINE_RE.sub("\n\n", text)
     return text.strip()
+
+
+def _link_replacement(match: re.Match[str]) -> str:
+    text, url = match.group(1).strip(), match.group(2).strip()
+    if not text or text == url:
+        return url
+    return f"{text} ({url})"
+
+
+def strip_markdown(text: str) -> str:
+    """Flatten Markdown to plain text for Facebook, which renders no formatting.
+
+    Removes emphasis (**bold**, *italic*, __bold__), ATX headings, horizontal
+    rules, blockquote markers, inline code and code fences, and rewrites
+    ``[label](url)`` links to ``label (url)``. Intended for post *content*; do
+    not run it over a hashtags string, whose leading ``#`` it must not touch.
+    """
+    if not text:
+        return text
+    text = text.replace("\r\n", "\n")
+    text = _CODE_FENCE_RE.sub("", text)
+    text = _HR_RE.sub("", text)
+    text = _HEADING_RE.sub("", text)
+    text = _BLOCKQUOTE_RE.sub("", text)
+    text = _LINK_RE.sub(_link_replacement, text)
+    text = _INLINE_CODE_RE.sub(r"\1", text)
+    text = _ASTERISK_EMPHASIS_RE.sub(r"\2", text)
+    text = _UNDERSCORE_BOLD_RE.sub(r"\1", text)
+    return clean_content(text)
 
 
 def normalize_hashtags(text: str, max_tags: int = 10) -> str:

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 DEFAULT_GLOBAL_PROMPT = (
-    "You are an expert social media content writer for the Flowtina platform. "
+    "You are an expert social media content writer. "
     "Always write clear, engaging, original content. Follow safety and brand "
-    "guidelines. Never invent facts. Respect the requested language and length."
+    "guidelines. Never invent facts. Respect the requested language and length. "
+    "Write plain text only: do not use Markdown or any formatting syntax. "
+    "Never use asterisks for bold or italics, no #-headings, no backticks, and "
+    "no [text](url) link syntax. Use line breaks and emojis for structure."
 )
 
 # Built-in content-type templates keyed by type. Used when a project has no

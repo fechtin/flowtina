@@ -31,6 +31,7 @@ from app.repositories.repositories import (
 from app.schemas.content import FacebookPageCreate
 from app.utils.media import remove_upload, upload_abs_path
 from app.utils.retry import retry_async
+from app.utils.text import strip_markdown
 
 log = get_logger("facebook")
 
@@ -286,7 +287,9 @@ class FacebookService:
 
     @staticmethod
     def _compose_message(post: Post) -> str:
-        parts = [post.content.strip()]
+        # Facebook renders plain text, so flatten any Markdown in the body. The
+        # hashtags string is appended untouched (its leading #'s are literal).
+        parts = [strip_markdown(post.content)]
         if post.hashtags:
             parts.append(post.hashtags.strip())
         return "\n\n".join(p for p in parts if p)
