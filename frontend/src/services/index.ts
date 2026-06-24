@@ -150,6 +150,9 @@ export const postService = {
     })
   },
   removeImage: (id: string) => http.delete<unknown, Post>(`/posts/${id}/image`),
+  // Fetch an uploaded binary image (auth-protected) as a Blob for previewing.
+  fetchImage: (id: string) =>
+    http.get<unknown, Blob>(`/posts/${id}/image`, { responseType: 'blob' }),
 }
 
 // ---------- Jobs ----------

@@ -20,6 +20,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
+import PostImage from '@/components/ui/PostImage.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import NoProjectNotice from '@/components/ui/NoProjectNotice.vue'
 import { postService, facebookService } from '@/services'
@@ -335,18 +336,12 @@ watch(projectId, () => {
             {{ truncate(p.content, 200) }}
           </p>
 
-          <img
-            v-if="p.image_url"
-            :src="p.image_url"
-            alt=""
-            class="mt-3 max-h-40 w-full rounded-lg border border-gray-200 object-cover dark:border-gray-700"
+          <PostImage
+            :post-id="p.id"
+            :image-url="p.image_url"
+            :has-uploaded-image="p.has_uploaded_image"
+            img-class="mt-3 max-h-40 w-full object-cover"
           />
-          <span
-            v-else-if="p.has_uploaded_image"
-            class="badge mt-3 inline-flex w-fit items-center gap-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
-          >
-            <ImageIcon class="h-3 w-3" /> {{ t('posts.imageAttached') }}
-          </span>
 
           <div v-if="hashtagList(p.hashtags).length" class="mt-3 flex flex-wrap gap-1">
             <span
@@ -410,18 +405,12 @@ watch(projectId, () => {
             <Bot class="h-3 w-3" /> {{ t('posts.aiGenerated') }}
           </span>
         </div>
-        <img
-          v-if="previewing.image_url"
-          :src="previewing.image_url"
-          alt=""
-          class="max-h-72 w-full rounded-lg border border-gray-200 object-contain dark:border-gray-700"
+        <PostImage
+          :post-id="previewing.id"
+          :image-url="previewing.image_url"
+          :has-uploaded-image="previewing.has_uploaded_image"
+          img-class="max-h-72 w-full object-contain"
         />
-        <span
-          v-else-if="previewing.has_uploaded_image"
-          class="badge inline-flex w-fit items-center gap-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
-        >
-          <ImageIcon class="h-3 w-3" /> {{ t('posts.imageAttached') }}
-        </span>
         <p class="max-h-[55vh] overflow-y-auto whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-200">
           {{ previewing.content }}
         </p>
@@ -466,12 +455,12 @@ watch(projectId, () => {
           </label>
 
           <template v-if="editing?.has_uploaded_image">
-            <div
-              class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800/50"
-            >
-              <span class="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                <ImageIcon class="h-4 w-4" /> {{ t('posts.imageAttached') }}
-              </span>
+            <PostImage
+              :post-id="editing.id"
+              :has-uploaded-image="true"
+              img-class="max-h-48 w-full object-contain"
+            />
+            <div class="flex justify-end">
               <button type="button" class="btn-ghost text-red-600" @click="removeAttachedImage">
                 <X class="h-4 w-4" /> {{ t('posts.removeImage') }}
               </button>

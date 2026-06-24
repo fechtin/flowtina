@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_owned_project
 from app.core.database import get_db
+from app.core.exceptions import NotFoundException
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.common import ok
@@ -14,7 +16,7 @@ from app.schemas.content import GenerateRequest, PostCreate, PostOut, PostUpdate
 from app.services.content_service import ContentService
 from app.services.facebook_service import FacebookService
 from app.services.post_service import PostService
-from app.utils.media import save_upload
+from app.utils.media import save_upload, upload_abs_path
 
 router = APIRouter(tags=["posts"])
 
@@ -133,6 +135,22 @@ async def upload_post_image(
     rel_path = await save_upload(file, post.id)
     post = svc.set_image_path(post.id, rel_path)
     return ok(PostOut.model_validate(post).model_dump(), "Image uploaded")
+
+
+@router.get("/posts/{post_id}/image")
+def get_post_image(
+    post_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stream a post's uploaded binary image so the UI can preview it."""
+    post = PostService(db).get(post_id)
+    if not post.image_path:
+        raise NotFoundException("This post has no uploaded image")
+    abs_path = upload_abs_path(post.image_path)
+    if not abs_path.exists():
+        raise NotFoundException("Uploaded image is no longer available")
+    return FileResponse(abs_path)
 
 
 @router.delete("/posts/{post_id}/image")
