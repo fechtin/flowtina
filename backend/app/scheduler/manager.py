@@ -112,6 +112,12 @@ class SchedulerManager:
             args=[settings.log_retention_days],
             replace_existing=True,
         )
+        self.scheduler.add_job(
+            task_jobs.engage_comments,
+            trigger=IntervalTrigger(minutes=settings.facebook_engage_interval_minutes),
+            id="maintenance_engage_comments",
+            replace_existing=True,
+        )
 
 
 scheduler_manager = SchedulerManager()

@@ -64,3 +64,14 @@ DEFAULT_SUMMARIZE_PROMPT = (
     "Summarize the following content in {{language}} in under 1500 characters, keeping the key "
     "facts:\n\n{{source_content}}"
 )
+
+DEFAULT_REPLY_PROMPT = (
+    "You manage the social media page that published the post below. Write a single, "
+    "friendly reply in {{language}} to a follower's comment on that post.\n"
+    "{{persona}}\n"
+    "Post:\n{{post_content}}\n\n"
+    "Follower's comment:\n{{comment}}\n\n"
+    "Reply rules: be warm and concise (1-2 sentences), stay on topic, never invent "
+    "facts or make promises, do not ask for personal data, and do not include "
+    "hashtags or links. Write plain text only with no Markdown. Return only the reply text."
+)

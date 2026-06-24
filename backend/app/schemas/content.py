@@ -175,6 +175,29 @@ class FacebookPageOut(TimestampedSchema):
     page_id: str
     status: str
     enabled: bool
+    auto_like_comments: bool = False
+    auto_reply_comments: bool = False
+    reply_persona: str | None = None
+
+
+class FacebookEngagementUpdate(BaseModel):
+    auto_like_comments: bool | None = None
+    auto_reply_comments: bool | None = None
+    reply_persona: str | None = Field(default=None, max_length=2000)
+
+
+class FacebookCommentOut(TimestampedSchema):
+    page_id: str
+    facebook_post_id: str
+    comment_id: str
+    commenter_name: str | None = None
+    message: str | None = None
+    liked: bool
+    replied: bool
+    reply_text: str | None = None
+    status: str
+    error_message: str | None = None
+    processed_at: datetime | None = None
 
 
 class FacebookPublishRequest(BaseModel):

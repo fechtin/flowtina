@@ -193,12 +193,37 @@ export interface FacebookPage {
   page_name: string
   page_id: string
   access_token?: string
+  auto_like_comments?: boolean
+  auto_reply_comments?: boolean
+  reply_persona?: string | null
 }
 
 export interface FacebookDiscoveredPage {
   page_id: string
   page_name: string
   already_connected: boolean
+}
+
+export interface FacebookEngagementUpdate {
+  auto_like_comments?: boolean
+  auto_reply_comments?: boolean
+  reply_persona?: string | null
+}
+
+export interface FacebookComment {
+  id: string
+  page_id: string
+  facebook_post_id: string
+  comment_id: string
+  commenter_name?: string | null
+  message?: string | null
+  liked: boolean
+  replied: boolean
+  reply_text?: string | null
+  status: string
+  error_message?: string | null
+  processed_at?: string | null
+  created_at?: string
 }
 
 export interface TelegramConfig {

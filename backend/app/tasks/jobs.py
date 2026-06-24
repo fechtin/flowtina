@@ -77,6 +77,21 @@ def send_daily_report(project_id: str) -> None:
         db.close()
 
 
+def engage_comments() -> None:
+    """Poll pages with auto-engagement enabled and like/reply to new comments."""
+    from app.services.facebook_engagement_service import FacebookEngagementService
+
+    db = SessionLocal()
+    try:
+        count = _run_async(FacebookEngagementService(db).engage_all())
+        if count:
+            log.info(f"Comment engagement processed {count} new comment(s)")
+    except Exception as exc:  # noqa: BLE001 - engagement is best-effort
+        log.warning(f"Comment engagement run failed: {exc}")
+    finally:
+        db.close()
+
+
 def cleanup_logs(retention_days: int = 30) -> None:
     """Delete system logs older than the retention window."""
     from app.repositories.repositories import SystemLogRepository

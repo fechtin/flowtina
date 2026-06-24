@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # for a long-lived one before discovering Pages.
     facebook_app_id: str = ""
     facebook_app_secret: str = ""
+    # --- Comment auto-engagement (poller) ---
+    # How often the scheduler polls pages with auto-like/auto-reply enabled.
+    facebook_engage_interval_minutes: int = 10
+    # Recent posts scanned per page per poll (newest first).
+    facebook_engage_max_posts: int = 25
+    # Comments fetched per post per poll (newest first).
+    facebook_engage_max_comments: int = 50
 
     # --- Rate limiting (requests / minute) ---
     rate_limit_anonymous: int = 30

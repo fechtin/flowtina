@@ -20,6 +20,35 @@ class FacebookPage(Base, BaseModelMixin):
     access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="healthy", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Auto-engagement: when enabled, the scheduler polls recent posts and likes
+    # and/or AI-replies to incoming comments. Requires the page token to carry
+    # pages_read_engagement + pages_manage_engagement.
+    auto_like_comments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_reply_comments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Optional persona/guidance steering AI-generated comment replies.
+    reply_persona: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class FacebookComment(Base, BaseModelMixin):
+    """A comment seen on one of the page's posts, with engagement outcome.
+
+    One row per Facebook comment id keeps the poller idempotent: a comment is
+    liked/replied at most once even if it is returned again on the next poll.
+    """
+
+    __tablename__ = "facebook_comments"
+
+    page_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    facebook_post_id: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    comment_id: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    commenter_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    liked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    replied: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reply_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="processed", nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FacebookPost(Base, BaseModelMixin):

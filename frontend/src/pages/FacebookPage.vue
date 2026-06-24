@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Facebook, DownloadCloud, ExternalLink, CheckCircle2 } from 'lucide-vue-next'
+import {
+  Plus,
+  Trash2,
+  Facebook,
+  DownloadCloud,
+  ExternalLink,
+  CheckCircle2,
+  MessageCircle,
+  RefreshCw,
+  ThumbsUp,
+} from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -13,7 +23,7 @@ import { useCurrentProject } from '@/composables/useCurrentProject'
 import { useAsync } from '@/composables/useAsync'
 import { extractErrorMessage } from '@/services/http'
 import { useToastStore } from '@/stores/toast'
-import type { FacebookPage, FacebookDiscoveredPage } from '@/types'
+import type { FacebookPage, FacebookDiscoveredPage, FacebookComment } from '@/types'
 
 const { t } = useI18n()
 const toast = useToastStore()
@@ -124,6 +134,53 @@ async function doImport(pageIds: string[]) {
   }
 }
 
+// --- Comment auto-engagement ---
+const showEngage = ref(false)
+const engagePage = ref<FacebookPage | null>(null)
+const engageForm = reactive({ auto_like_comments: false, auto_reply_comments: false, reply_persona: '' })
+const comments = ref<FacebookComment[]>([])
+const { loading: savingEngage, run: runEngage } = useAsync()
+const { loading: engagingNow, run: runEngageNow } = useAsync()
+
+async function openEngage(page: FacebookPage) {
+  engagePage.value = page
+  engageForm.auto_like_comments = !!page.auto_like_comments
+  engageForm.auto_reply_comments = !!page.auto_reply_comments
+  engageForm.reply_persona = page.reply_persona ?? ''
+  comments.value = []
+  showEngage.value = true
+  await loadComments(page.id)
+}
+
+async function loadComments(id: string) {
+  try {
+    comments.value = await facebookService.listComments(id)
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  }
+}
+
+async function saveEngage() {
+  if (!engagePage.value) return
+  const updated = await runEngage(
+    () => facebookService.updateEngagement(engagePage.value!.id, { ...engageForm }),
+    { successMessage: t('facebook.engagementSaved') },
+  )
+  if (updated !== undefined) {
+    showEngage.value = false
+    await load()
+  }
+}
+
+async function engageNow() {
+  if (!engagePage.value) return
+  const result = await runEngageNow(() => facebookService.engageNow(engagePage.value!.id))
+  if (result !== undefined) {
+    toast.success(t('facebook.engaged', { count: result?.processed ?? 0 }))
+    await loadComments(engagePage.value.id)
+  }
+}
+
 function confirmDelete(id: string) {
   deleteId.value = id
   showConfirm.value = true
@@ -172,6 +229,26 @@ async function doDelete() {
           </div>
           <button class="btn-ghost text-red-600" @click="confirmDelete(p.id)">
             <Trash2 class="h-4 w-4" />
+          </button>
+        </div>
+
+        <div class="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800">
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              v-if="p.auto_like_comments"
+              class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600 dark:bg-blue-950 dark:text-blue-300"
+            >
+              <ThumbsUp class="h-3 w-3" /> {{ t('facebook.autoLike') }}
+            </span>
+            <span
+              v-if="p.auto_reply_comments"
+              class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-600 dark:bg-green-950 dark:text-green-300"
+            >
+              <MessageCircle class="h-3 w-3" /> {{ t('facebook.autoReply') }}
+            </span>
+          </div>
+          <button class="btn-secondary text-xs" @click="openEngage(p)">
+            <MessageCircle class="h-3.5 w-3.5" /> {{ t('facebook.engagement') }}
           </button>
         </div>
       </div>
@@ -302,6 +379,83 @@ async function doDelete() {
           <button type="button" class="btn-primary" :disabled="importing" @click="importSelected">
             <DownloadCloud class="h-4 w-4" />
             {{ importing ? t('common.loading') : t('facebook.importSelected') }}
+          </button>
+        </div>
+      </div>
+    </BaseModal>
+
+    <!-- Comment auto-engagement -->
+    <BaseModal v-model="showEngage" :title="t('facebook.engagementTitle')">
+      <div class="space-y-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('facebook.engagementHint') }}</p>
+
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <input v-model="engageForm.auto_like_comments" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoLike') }}</span>
+            <span class="block text-xs text-gray-400">{{ t('facebook.autoLikeHint') }}</span>
+          </span>
+        </label>
+
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <input v-model="engageForm.auto_reply_comments" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoReply') }}</span>
+            <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyHint') }}</span>
+          </span>
+        </label>
+
+        <div v-if="engageForm.auto_reply_comments">
+          <label class="label">{{ t('facebook.replyPersona') }}</label>
+          <textarea
+            v-model="engageForm.reply_persona"
+            rows="3"
+            class="input text-sm"
+            :placeholder="t('facebook.replyPersonaPlaceholder')"
+          />
+        </div>
+
+        <p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+          {{ t('facebook.engagementScopes') }}
+        </p>
+
+        <!-- Recent processed comments -->
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('facebook.recentComments') }}</span>
+            <button class="btn-ghost text-xs" :disabled="engagingNow" @click="engageNow">
+              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': engagingNow }" />
+              {{ t('facebook.engageNow') }}
+            </button>
+          </div>
+          <p v-if="!comments.length" class="text-xs text-gray-400">{{ t('facebook.noComments') }}</p>
+          <div v-else class="max-h-56 space-y-2 overflow-y-auto">
+            <div
+              v-for="c in comments"
+              :key="c.id"
+              class="rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="truncate font-medium text-gray-900 dark:text-white">{{ c.commenter_name || '—' }}</span>
+                <span class="flex shrink-0 gap-1.5">
+                  <span v-if="c.liked" class="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-300">
+                    <ThumbsUp class="h-3 w-3" /> {{ t('facebook.liked') }}
+                  </span>
+                  <span v-if="c.replied" class="inline-flex items-center gap-0.5 text-green-600 dark:text-green-300">
+                    <MessageCircle class="h-3 w-3" /> {{ t('facebook.replied') }}
+                  </span>
+                </span>
+              </div>
+              <p class="mt-0.5 truncate text-gray-500 dark:text-gray-400">{{ c.message || '—' }}</p>
+              <p v-if="c.reply_text" class="mt-1 truncate italic text-gray-400">↳ {{ c.reply_text }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" class="btn-secondary" @click="showEngage = false">{{ t('common.cancel') }}</button>
+          <button type="button" class="btn-primary" :disabled="savingEngage" @click="saveEngage">
+            {{ savingEngage ? t('common.loading') : t('common.save') }}
           </button>
         </div>
       </div>

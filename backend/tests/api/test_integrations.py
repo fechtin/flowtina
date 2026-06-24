@@ -118,3 +118,69 @@ def test_facebook_connect_and_publish(client, auth_headers, project, monkeypatch
     )
     assert pub.status_code == 200
     assert pub.json()["data"]["facebook_post_id"] == "fb_post_123"
+
+
+def test_facebook_comment_engagement(client, auth_headers, project, monkeypatch):
+    from app.providers.base import GenerationResult
+    from app.services.facebook_engagement_service import FacebookEngagementService
+
+    async def fake_graph(url, data):
+        return {"id": "fb_post_123"}
+
+    async def fake_fetch(self, fb_post_id, token):
+        return [{"id": "c1", "message": "Great post!", "from": {"id": "999", "name": "Fan"}}]
+
+    liked: list[str] = []
+    replied: list[tuple[str, str]] = []
+
+    async def fake_like(self, comment_id, token):
+        liked.append(comment_id)
+
+    async def fake_reply(self, comment_id, message, token):
+        replied.append((comment_id, message))
+
+    async def fake_generate(self, project_id, prompt):
+        return GenerationResult(text="Thank you so much!", model="test")
+
+    monkeypatch.setattr("app.services.facebook_service.FacebookService._call_graph", staticmethod(fake_graph))
+    monkeypatch.setattr(FacebookEngagementService, "_fetch_comments", fake_fetch)
+    monkeypatch.setattr(FacebookEngagementService, "_like_comment", fake_like)
+    monkeypatch.setattr(FacebookEngagementService, "_reply_comment", fake_reply)
+    monkeypatch.setattr("app.services.ai_service.AIService.generate", fake_generate)
+
+    page = client.post(
+        f"/api/v1/projects/{project}/facebook/pages",
+        json={"page_name": "My Page", "page_id": "111", "access_token": "tok"},
+        headers=auth_headers,
+    ).json()["data"]
+    post = client.post(
+        f"/api/v1/projects/{project}/posts",
+        json={"content": "Hello Facebook from Flowtina engagement test content."},
+        headers=auth_headers,
+    ).json()["data"]
+    client.post(f"/api/v1/posts/{post['id']}/publish?page_id={page['id']}", headers=auth_headers)
+
+    # Enable auto-like + auto-reply for the page.
+    upd = client.patch(
+        f"/api/v1/facebook/pages/{page['id']}/engagement",
+        json={"auto_like_comments": True, "auto_reply_comments": True, "reply_persona": "Friendly"},
+        headers=auth_headers,
+    )
+    assert upd.status_code == 200
+    assert upd.json()["data"]["auto_reply_comments"] is True
+
+    # Trigger one engagement pass.
+    res = client.post(f"/api/v1/facebook/pages/{page['id']}/engage-now", headers=auth_headers)
+    assert res.json()["data"]["processed"] == 1
+    assert liked == ["c1"]
+    assert replied == [("c1", "Thank you so much!")]
+
+    # The comment is recorded and not re-processed on a second pass.
+    again = client.post(f"/api/v1/facebook/pages/{page['id']}/engage-now", headers=auth_headers)
+    assert again.json()["data"]["processed"] == 0
+
+    comments = client.get(f"/api/v1/facebook/pages/{page['id']}/comments", headers=auth_headers).json()["data"]
+    assert len(comments) == 1
+    assert comments[0]["liked"] is True
+    assert comments[0]["replied"] is True
+    assert comments[0]["reply_text"] == "Thank you so much!"

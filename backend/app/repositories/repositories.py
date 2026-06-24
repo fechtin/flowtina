@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 
 from app.models.integration import (
     AuditLog,
+    FacebookComment,
     FacebookPage,
     FacebookPost,
     Notification,
@@ -176,6 +177,19 @@ class FacebookPageRepository(BaseRepository[FacebookPage]):
 
 class FacebookPostRepository(BaseRepository[FacebookPost]):
     model = FacebookPost
+
+
+class FacebookCommentRepository(BaseRepository[FacebookComment]):
+    model = FacebookComment
+
+    def exists(self, comment_id: str) -> bool:
+        stmt = select(func.count()).select_from(FacebookComment).where(
+            FacebookComment.comment_id == comment_id
+        )
+        return bool(self.db.execute(stmt).scalar())
+
+    def list_for_page(self, page_id: str, limit: int = 50) -> list[FacebookComment]:
+        return self.list(page_id=page_id, order_by="created_at", desc=True, limit=limit)
 
 
 class TelegramConfigRepository(BaseRepository[TelegramConfig]):

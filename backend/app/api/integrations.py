@@ -7,11 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_owned_project
 from app.core.database import get_db
+from app.core.exceptions import NotFoundException
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.common import ok
 from app.schemas.content import (
+    FacebookCommentOut,
     FacebookDiscoveredPage,
+    FacebookEngagementUpdate,
     FacebookImportRequest,
     FacebookPageCreate,
     FacebookPageOut,
@@ -19,6 +22,7 @@ from app.schemas.content import (
     TelegramConfigOut,
     TelegramTestRequest,
 )
+from app.services.facebook_engagement_service import FacebookEngagementService
 from app.services.facebook_service import FacebookService
 from app.services.telegram_service import TelegramService
 
@@ -76,6 +80,50 @@ async def import_pages(
 def delete_page(page_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     FacebookService(db).delete_page(page_id)
     return ok(message="Page disconnected")
+
+
+@router.patch("/facebook/pages/{page_id}/engagement")
+def update_engagement(
+    page_id: str,
+    payload: FacebookEngagementUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Enable/disable auto-like and AI auto-reply for a page's comments."""
+    page = FacebookEngagementService(db).update_settings(
+        page_id,
+        auto_like_comments=payload.auto_like_comments,
+        auto_reply_comments=payload.auto_reply_comments,
+        reply_persona=payload.reply_persona,
+    )
+    return ok(FacebookPageOut.model_validate(page).model_dump(), "Engagement updated")
+
+
+@router.get("/facebook/pages/{page_id}/comments")
+def list_comments(
+    page_id: str,
+    limit: int = 50,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List comments the engagement poller has seen on this page's posts."""
+    comments = FacebookEngagementService(db).list_comments(page_id, limit=limit)
+    return ok([FacebookCommentOut.model_validate(c).model_dump() for c in comments])
+
+
+@router.post("/facebook/pages/{page_id}/engage-now")
+async def engage_now(
+    page_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Run the comment poll for one page immediately (manual trigger)."""
+    svc = FacebookEngagementService(db)
+    page = svc.pages.get(page_id)
+    if not page:
+        raise NotFoundException("Facebook page not found")
+    processed = await svc.engage_page(page)
+    return ok({"processed": processed}, f"Processed {processed} new comment(s)")
 
 
 # --- Telegram ---

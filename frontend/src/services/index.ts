@@ -7,6 +7,8 @@ import type {
   DashboardStats,
   FacebookPage,
   FacebookDiscoveredPage,
+  FacebookComment,
+  FacebookEngagementUpdate,
   Job,
   JobHistory,
   Keyword,
@@ -195,6 +197,12 @@ export const facebookService = {
       token: token || null,
       page_ids: pageIds ?? null,
     }),
+  updateEngagement: (id: string, payload: FacebookEngagementUpdate) =>
+    http.patch<unknown, FacebookPage>(`/facebook/pages/${id}/engagement`, payload),
+  listComments: (id: string, limit = 50) =>
+    http.get<unknown, FacebookComment[]>(`/facebook/pages/${id}/comments?limit=${limit}`),
+  engageNow: (id: string) =>
+    http.post<unknown, { processed: number }>(`/facebook/pages/${id}/engage-now`, {}),
 }
 
 // ---------- Telegram ----------
