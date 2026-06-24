@@ -1,32 +1,24 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Sun, Moon } from 'lucide-vue-next'
+import { Sun, Moon, Loader2, RefreshCw } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
-import { settingsService } from '@/services'
+import { providerService, settingsService } from '@/services'
 import { useSettingsStore } from '@/stores/settings'
+import { useToastStore } from '@/stores/toast'
 import { useAsync } from '@/composables/useAsync'
+import { extractErrorMessage } from '@/services/http'
+import { MODEL_PRESETS, PROVIDER_TYPES } from '@/constants/providers'
 import type { AppLocale } from '@/i18n'
 import type { AppSettings, AppSettingsUpdate, ProviderType } from '@/types'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
+const toast = useToastStore()
 const { loading, run } = useAsync()
 
 const initialLoading = ref(true)
-
-const providerOptions: ProviderType[] = [
-  'openai',
-  'gemini',
-  'claude',
-  'openrouter',
-  'deepseek',
-  'ollama',
-  'lmstudio',
-  'vllm',
-  'custom',
-]
 
 const form = reactive<AppSettings>({
   theme: settingsStore.theme,
@@ -66,6 +58,50 @@ onMounted(async () => {
   }
   initialLoading.value = false
 })
+
+// Models discovered live from the provider's API; fall back to static presets.
+const dynamicModels = ref<string[]>([])
+const loadingModels = ref(false)
+
+const availableModels = computed<string[]>(() => {
+  const base = dynamicModels.value.length
+    ? dynamicModels.value
+    : MODEL_PRESETS[form.default_provider as ProviderType] ?? []
+  // Keep the currently-selected model visible even if the API didn't list it.
+  if (form.default_model && !base.includes(form.default_model)) {
+    return [form.default_model, ...base]
+  }
+  return base
+})
+
+// Discover the provider's models using the default credentials typed this
+// session (the stored key is never returned, so an unchanged key can't be used).
+// `silent` skips the empty/no-key toast for automatic runs.
+async function fetchModels(silent = false) {
+  loadingModels.value = true
+  try {
+    const models = await providerService.listModels({
+      provider: form.default_provider,
+      base_url: form.default_base_url?.trim() || undefined,
+      api_key: apiKeyInput.value.trim() || undefined,
+    })
+    dynamicModels.value = models
+    if (models.length && !models.includes(form.default_model)) form.default_model = models[0]
+    if (!models.length && !silent) toast.error(t('providers.noModels'))
+  } catch (err) {
+    if (!silent) toast.error(extractErrorMessage(err))
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+// Reset discovered models when switching provider so presets show through.
+watch(
+  () => form.default_provider,
+  () => {
+    dynamicModels.value = []
+  },
+)
 
 function setTheme(theme: 'light' | 'dark') {
   if (settingsStore.theme !== theme) settingsStore.toggleTheme()
@@ -154,12 +190,26 @@ async function save() {
           <div>
             <label class="label">{{ t('settings.defaultProvider') }}</label>
             <select v-model="form.default_provider" class="input">
-              <option v-for="p in providerOptions" :key="p" :value="p">{{ p }}</option>
+              <option v-for="p in PROVIDER_TYPES" :key="p" :value="p">{{ p }}</option>
             </select>
           </div>
           <div>
-            <label class="label">{{ t('settings.defaultModel') }}</label>
-            <input v-model="form.default_model" class="input" />
+            <div class="flex items-center justify-between">
+              <label class="label">{{ t('settings.defaultModel') }}</label>
+              <button
+                type="button"
+                class="flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline disabled:opacity-50 dark:text-primary-400"
+                :disabled="loadingModels"
+                @click="fetchModels(false)"
+              >
+                <component :is="loadingModels ? Loader2 : RefreshCw" class="h-3 w-3" :class="loadingModels ? 'animate-spin' : ''" />
+                {{ t('providers.fetchModels') }}
+              </button>
+            </div>
+            <select v-if="availableModels.length" v-model="form.default_model" class="input">
+              <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <input v-else v-model="form.default_model" class="input" autocomplete="off" />
           </div>
           <div>
             <label class="label">{{ t('settings.dailyBudget') }}</label>

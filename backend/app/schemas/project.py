@@ -30,7 +30,7 @@ class ProjectOut(TimestampedSchema):
 # --- AI providers ---
 
 PROVIDER_VALUES = {
-    "openai", "gemini", "claude", "openrouter", "deepseek",
+    "openai", "groq", "gemini", "claude", "openrouter", "deepseek",
     "ollama", "lmstudio", "vllm", "custom",
 }
 
