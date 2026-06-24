@@ -29,7 +29,7 @@ log "Syncing application code..."
 rsync -a --delete \
   --exclude 'venv/' --exclude '__pycache__/' --exclude '.pytest_cache/' \
   --exclude '.ruff_cache/' --exclude '.mypy_cache/' --exclude 'database/*.db*' \
-  --exclude 'logs/*' --exclude '.env' \
+  --exclude 'logs/*' --exclude 'uploads/' --exclude '.env' \
   "${SRC}/backend/" "${APP_DIR}/backend/"
 rsync -a --delete "${SRC}/frontend/dist/" "${APP_DIR}/frontend/dist/"
 cp -r "${SRC}/scripts/." "${APP_DIR}/scripts/"
