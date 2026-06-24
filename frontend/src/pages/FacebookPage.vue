@@ -176,7 +176,13 @@ async function engageNow() {
   if (!engagePage.value) return
   const result = await runEngageNow(() => facebookService.engageNow(engagePage.value!.id))
   if (result !== undefined) {
-    toast.success(t('facebook.engaged', { count: result?.processed ?? 0 }))
+    // Every scanned post unreadable => the page token is almost certainly
+    // missing the engagement scopes; warn instead of a misleading success.
+    if (result.scanned > 0 && result.skipped === result.scanned) {
+      toast.error(t('facebook.engageNoPermission'))
+    } else {
+      toast.success(t('facebook.engaged', { count: result?.processed ?? 0 }))
+    }
     await loadComments(engagePage.value.id)
   }
 }

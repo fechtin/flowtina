@@ -202,7 +202,10 @@ export const facebookService = {
   listComments: (id: string, limit = 50) =>
     http.get<unknown, FacebookComment[]>(`/facebook/pages/${id}/comments?limit=${limit}`),
   engageNow: (id: string) =>
-    http.post<unknown, { processed: number }>(`/facebook/pages/${id}/engage-now`, {}),
+    http.post<unknown, { processed: number; scanned: number; skipped: number }>(
+      `/facebook/pages/${id}/engage-now`,
+      {},
+    ),
 }
 
 // ---------- Telegram ----------

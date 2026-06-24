@@ -279,6 +279,7 @@ export default {
     engagementSaved: 'Engagement settings saved',
     engageNow: 'Check comments now',
     engaged: 'Processed {count} new comment(s)',
+    engageNoPermission: 'Could not read comments. The page token needs pages_read_engagement and pages_manage_engagement — generate a new token with those scopes and Sync pages.',
     recentComments: 'Recent comments',
     noComments: 'No comments processed yet.',
     liked: 'Liked',
