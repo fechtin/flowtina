@@ -114,7 +114,7 @@ class SchedulerManager:
         )
         self.scheduler.add_job(
             task_jobs.engage_comments,
-            trigger=IntervalTrigger(minutes=settings.facebook_engage_interval_minutes),
+            trigger=IntervalTrigger(minutes=settings.facebook_engage_tick_minutes),
             id="maintenance_engage_comments",
             replace_existing=True,
         )

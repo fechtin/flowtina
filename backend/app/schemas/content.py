@@ -179,6 +179,9 @@ class FacebookPageOut(TimestampedSchema):
     auto_reply_comments: bool = False
     auto_reply_messages: bool = False
     reply_persona: str | None = None
+    engage_interval_minutes: int = 30
+    engage_max_actions: int = 25
+    last_engaged_at: datetime | None = None
 
 
 class FacebookEngagementUpdate(BaseModel):
@@ -186,6 +189,10 @@ class FacebookEngagementUpdate(BaseModel):
     auto_reply_comments: bool | None = None
     auto_reply_messages: bool | None = None
     reply_persona: str | None = Field(default=None, max_length=2000)
+    # How often this page is polled, in minutes (floored at the tick granularity).
+    engage_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
+    # Max comments acted on per page per cycle (like + reply safety cap).
+    engage_max_actions: int | None = Field(default=None, ge=1, le=200)
 
 
 class FacebookCommentOut(TimestampedSchema):

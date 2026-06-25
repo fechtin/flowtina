@@ -7,7 +7,7 @@ likes them and/or posts an AI-generated reply. State is tracked in
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy.orm import Session
@@ -54,6 +54,8 @@ class FacebookEngagementService:
         auto_reply_comments: bool | None = None,
         auto_reply_messages: bool | None = None,
         reply_persona: str | None = None,
+        engage_interval_minutes: int | None = None,
+        engage_max_actions: int | None = None,
     ) -> FacebookPage:
         page = self.pages.get(page_id)
         if not page:
@@ -66,6 +68,13 @@ class FacebookEngagementService:
             page.auto_reply_messages = auto_reply_messages
         if reply_persona is not None:
             page.reply_persona = reply_persona.strip() or None
+        if engage_interval_minutes is not None:
+            # Floor at the tick granularity: a shorter interval cannot be honoured.
+            page.engage_interval_minutes = max(
+                settings.facebook_engage_tick_minutes, min(engage_interval_minutes, 1440)
+            )
+        if engage_max_actions is not None:
+            page.engage_max_actions = max(1, min(engage_max_actions, 200))
         self.db.commit()
         self.db.refresh(page)
         return page
@@ -75,12 +84,29 @@ class FacebookEngagementService:
 
     # --- orchestration ---
 
+    def _is_due(self, page: FacebookPage, now: datetime) -> bool:
+        """True when enough time has elapsed since this page was last engaged.
+
+        The global poller ticks frequently; each page only runs once its own
+        ``engage_interval_minutes`` has passed since ``last_engaged_at``.
+        """
+        if page.last_engaged_at is None:
+            return True
+        last = page.last_engaged_at
+        if last.tzinfo is None:  # SQLite may return naive datetimes
+            last = last.replace(tzinfo=timezone.utc)
+        interval = max(1, int(page.engage_interval_minutes or 30))
+        return now - last >= timedelta(minutes=interval)
+
     async def engage_all(self) -> int:
-        """Process every page that has like or reply auto-engagement enabled."""
+        """Process every enabled page whose per-page interval is due."""
+        now = datetime.now(timezone.utc)
         pages = [
             p
             for p in self.pages.list(limit=None)
-            if p.enabled and (p.auto_like_comments or p.auto_reply_comments)
+            if p.enabled
+            and (p.auto_like_comments or p.auto_reply_comments)
+            and self._is_due(p, now)
         ]
         total = 0
         for page in pages:
@@ -99,15 +125,23 @@ class FacebookEngagementService:
         page's posts) or ``None``.
         """
         token = decrypt_secret(page.access_token_encrypted)
+        # Stamp the run up front so the per-page cadence holds even when the page
+        # errors out below — otherwise a broken page would be retried every tick.
+        page.last_engaged_at = datetime.now(timezone.utc)
+        self.db.commit()
         try:
             posts = await self._fetch_recent_posts(page.page_id, token)
         except FacebookException as exc:
             log.warning(f"Could not list posts for page {page.page_id}: {exc}")
             return {"processed": 0, "scanned": 0, "skipped": 0, "error": str(exc)}
 
+        # Safety cap: act on at most this many new comments this cycle.
+        cap = max(1, int(page.engage_max_actions or 25))
         processed = 0
         skipped = 0
         for post in posts:
+            if processed >= cap:
+                break
             post_id = str(post.get("id", ""))
             if not post_id:
                 continue
@@ -121,6 +155,8 @@ class FacebookEngagementService:
                 continue
             post_message = str(post.get("message") or "")
             for comment in comments:
+                if processed >= cap:
+                    break
                 if await self._process_comment(page, post_id, post_message, comment, token):
                     processed += 1
         if processed:

@@ -100,6 +100,8 @@ def update_engagement(
         auto_reply_comments=payload.auto_reply_comments,
         auto_reply_messages=payload.auto_reply_messages,
         reply_persona=payload.reply_persona,
+        engage_interval_minutes=payload.engage_interval_minutes,
+        engage_max_actions=payload.engage_max_actions,
     )
     return ok(FacebookPageOut.model_validate(page).model_dump(), "Engagement updated")
 

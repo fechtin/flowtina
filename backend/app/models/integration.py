@@ -30,6 +30,15 @@ class FacebookPage(Base, BaseModelMixin):
     auto_reply_messages: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Optional persona/guidance steering AI-generated comment replies.
     reply_persona: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Per-page poll cadence: the engagement tick skips this page until at least
+    # this many minutes have passed since last_engaged_at.
+    engage_interval_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    # Safety cap: at most this many comments are acted on per page per cycle, so
+    # a sudden comment spike cannot trigger a burst of like/reply API calls.
+    engage_max_actions: Mapped[int] = mapped_column(Integer, default=25, nullable=False)
+    # When the engagement poller last finished a run for this page (drives the
+    # per-page due check). Null until the first run.
+    last_engaged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FacebookComment(Base, BaseModelMixin):

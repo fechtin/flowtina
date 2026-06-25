@@ -137,7 +137,13 @@ async function doImport(pageIds: string[]) {
 // --- Comment auto-engagement ---
 const showEngage = ref(false)
 const engagePage = ref<FacebookPage | null>(null)
-const engageForm = reactive({ auto_like_comments: false, auto_reply_comments: false, reply_persona: '' })
+const engageForm = reactive({
+  auto_like_comments: false,
+  auto_reply_comments: false,
+  reply_persona: '',
+  engage_interval_minutes: 30,
+  engage_max_actions: 25,
+})
 const comments = ref<FacebookComment[]>([])
 const { loading: savingEngage, run: runEngage } = useAsync()
 const { loading: engagingNow, run: runEngageNow } = useAsync()
@@ -147,6 +153,8 @@ async function openEngage(page: FacebookPage) {
   engageForm.auto_like_comments = !!page.auto_like_comments
   engageForm.auto_reply_comments = !!page.auto_reply_comments
   engageForm.reply_persona = page.reply_persona ?? ''
+  engageForm.engage_interval_minutes = page.engage_interval_minutes ?? 30
+  engageForm.engage_max_actions = page.engage_max_actions ?? 25
   comments.value = []
   showEngage.value = true
   await loadComments(page.id)
@@ -420,6 +428,31 @@ async function doDelete() {
             class="input text-sm"
             :placeholder="t('facebook.replyPersonaPlaceholder')"
           />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">{{ t('facebook.engageInterval') }}</label>
+            <input
+              v-model.number="engageForm.engage_interval_minutes"
+              type="number"
+              min="5"
+              max="1440"
+              class="input text-sm"
+            />
+            <span class="mt-1 block text-xs text-gray-400">{{ t('facebook.engageIntervalHint') }}</span>
+          </div>
+          <div>
+            <label class="label">{{ t('facebook.engageMaxActions') }}</label>
+            <input
+              v-model.number="engageForm.engage_max_actions"
+              type="number"
+              min="1"
+              max="200"
+              class="input text-sm"
+            />
+            <span class="mt-1 block text-xs text-gray-400">{{ t('facebook.engageMaxActionsHint') }}</span>
+          </div>
         </div>
 
         <p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">

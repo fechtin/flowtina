@@ -196,6 +196,9 @@ export interface FacebookPage {
   auto_like_comments?: boolean
   auto_reply_comments?: boolean
   reply_persona?: string | null
+  engage_interval_minutes?: number
+  engage_max_actions?: number
+  last_engaged_at?: string | null
 }
 
 export interface FacebookDiscoveredPage {
@@ -208,6 +211,8 @@ export interface FacebookEngagementUpdate {
   auto_like_comments?: boolean
   auto_reply_comments?: boolean
   reply_persona?: string | null
+  engage_interval_minutes?: number
+  engage_max_actions?: number
 }
 
 export interface FacebookComment {

@@ -83,8 +83,10 @@ class Settings(BaseSettings):
     # the same value in the Messenger webhook config on the Meta dashboard.
     messenger_verify_token: str = ""
     # --- Comment auto-engagement (poller) ---
-    # How often the scheduler polls pages with auto-like/auto-reply enabled.
-    facebook_engage_interval_minutes: int = 10
+    # How often the scheduler "ticks" to look for pages due for engagement. The
+    # actual cadence is per-page (FacebookPage.engage_interval_minutes); this is
+    # just the polling granularity, so it should be <= the smallest page interval.
+    facebook_engage_tick_minutes: int = 5
     # Recent posts scanned per page per poll (newest first).
     facebook_engage_max_posts: int = 25
     # Comments fetched per post per poll (newest first).
