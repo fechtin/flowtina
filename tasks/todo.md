@@ -84,8 +84,27 @@ Mở rộng FacebookPage (IG gắn liền 1 FB Page, dùng chung page token).
 - [x] frontend vue-tsc sạch
 
 ### Còn lại (vận hành, không phải code)
+- [x] docs/instagram-setup.md (publish)
 - [ ] Meta App Review: instagram_basic + instagram_content_publish (Live mode)
 - [ ] IG phải là Business/Creator account liên kết Page; token cần các scope trên
-- [ ] Cân nhắc docs/instagram-setup.md (như docs/messenger-setup.md)
+
+---
+
+## Instagram comment + DM auto-reply — DONE ✅
+
+### Backend
+- [x] Model: FacebookPage += auto_reply_ig_comments/auto_reply_ig_messages; MessengerEvent += channel; memory CHANNEL_IG_COMMENT/IG_MESSAGE
+- [x] Migration f0c1d2e3a4b5 (up/down/up clean)
+- [x] Repo: get_by_instagram_user_id
+- [x] MessengerService: enqueue + reply cho object=="instagram" (send qua /{ig-user-id}/messages), channel-aware
+- [x] FacebookEngagementService: poll IG media + reply comment qua /{comment-id}/replies; EngageResult TypedDict (fix lỗi mypy cũ)
+- [x] webhook integrations.py: nhận object=="instagram"; engage-now chạy cả IG
+- [x] schema FacebookEngagementUpdate/PageOut += 2 toggle; API
+### Frontend
+- [x] FacebookPage.vue: 2 toggle IG comment/DM (gated by hasInstagram) + i18n en/vi; vue-tsc sạch
+### Verify
+- [x] +5 test (2 IG DM, 2 IG comment, +1); full suite pass; ruff + mypy changed files sạch
+### Docs
+- [x] docs/instagram-setup.md §8 comment/DM auto-reply + webhook IG + scopes
 </new_string>
 </invoke>

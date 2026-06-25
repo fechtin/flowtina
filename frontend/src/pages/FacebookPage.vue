@@ -135,6 +135,8 @@ const engageForm = reactive({
   auto_like_comments: false,
   auto_reply_comments: false,
   auto_reply_messages: false,
+  auto_reply_ig_comments: false,
+  auto_reply_ig_messages: false,
   reply_persona: '',
   engage_interval_minutes: 30,
   engage_max_actions: 25,
@@ -168,6 +170,8 @@ watch(
     engageForm.auto_like_comments = !!page.auto_like_comments
     engageForm.auto_reply_comments = !!page.auto_reply_comments
     engageForm.auto_reply_messages = !!page.auto_reply_messages
+    engageForm.auto_reply_ig_comments = !!page.auto_reply_ig_comments
+    engageForm.auto_reply_ig_messages = !!page.auto_reply_ig_messages
     engageForm.reply_persona = page.reply_persona ?? ''
     engageForm.engage_interval_minutes = page.engage_interval_minutes ?? 30
     engageForm.engage_max_actions = page.engage_max_actions ?? 25
@@ -344,7 +348,43 @@ async function doDelete() {
           </span>
         </label>
 
-        <div v-if="engageForm.auto_reply_comments || engageForm.auto_reply_messages">
+        <template v-if="hasInstagram">
+          <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-pink-200 p-3 dark:border-pink-900/50">
+            <input v-model="engageForm.auto_reply_ig_comments" type="checkbox" class="mt-0.5 h-4 w-4" />
+            <span class="min-w-0">
+              <span class="flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-white">
+                <Instagram class="h-4 w-4 text-pink-600" /> {{ t('facebook.autoReplyIgComments') }}
+              </span>
+              <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyIgCommentsHint') }}</span>
+            </span>
+          </label>
+
+          <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-pink-200 p-3 dark:border-pink-900/50">
+            <input v-model="engageForm.auto_reply_ig_messages" type="checkbox" class="mt-0.5 h-4 w-4" />
+            <span class="min-w-0">
+              <span class="flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-white">
+                <Instagram class="h-4 w-4 text-pink-600" /> {{ t('facebook.autoReplyIgMessages') }}
+              </span>
+              <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyIgMessagesHint') }}</span>
+            </span>
+          </label>
+
+          <p
+            v-if="engageForm.auto_reply_ig_comments || engageForm.auto_reply_ig_messages"
+            class="rounded-lg bg-pink-50 p-2 text-xs text-pink-700 dark:bg-pink-950 dark:text-pink-300"
+          >
+            {{ t('facebook.igEngagementScopes') }}
+          </p>
+        </template>
+
+        <div
+          v-if="
+            engageForm.auto_reply_comments ||
+            engageForm.auto_reply_messages ||
+            engageForm.auto_reply_ig_comments ||
+            engageForm.auto_reply_ig_messages
+          "
+        >
           <label class="label">{{ t('facebook.replyPersona') }}</label>
           <textarea
             v-model="engageForm.reply_persona"

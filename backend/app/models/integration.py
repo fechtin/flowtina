@@ -38,6 +38,11 @@ class FacebookPage(Base, BaseModelMixin):
     # When enabled, the Messenger webhook AI-replies to direct messages. Requires
     # the page token to carry pages_messaging.
     auto_reply_messages: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Instagram engagement (only meaningful when an IG account is linked). Comment
+    # auto-reply polls the IG account's media; DM auto-reply is webhook-driven.
+    # Require instagram_manage_comments and instagram_manage_messages respectively.
+    auto_reply_ig_comments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_reply_ig_messages: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Optional persona/guidance steering AI-generated comment replies.
     reply_persona: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Per-page poll cadence: the engagement tick skips this page until at least
@@ -87,7 +92,10 @@ class MessengerEvent(Base, BaseModelMixin):
 
     # Internal FacebookPage.id (not the Facebook page id) the message arrived on.
     page_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
-    # The follower's page-scoped id (PSID) we reply to.
+    # Channel the DM arrived on: "messenger" (Facebook) or "ig_dm" (Instagram).
+    # Drives which Send endpoint the reply uses.
+    channel: Mapped[str] = mapped_column(String(16), default="messenger", nullable=False)
+    # The follower's page-scoped id (PSID for Messenger, IGSID for Instagram).
     sender_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     # Meta's per-message id; unique so retried webhook deliveries are ignored.
     mid: Mapped[str | None] = mapped_column(String(191), unique=True, nullable=True)

@@ -181,6 +181,15 @@ class FacebookPageRepository(BaseRepository[FacebookPage]):
         rows = self.list(page_id=fb_page_id, limit=1)
         return rows[0] if rows else None
 
+    def get_by_instagram_user_id(self, ig_user_id: str) -> FacebookPage | None:
+        """Resolve a connected page by its linked Instagram account id.
+
+        For Instagram webhooks, ``entry.id`` is the IG account id rather than the
+        Facebook page id.
+        """
+        rows = self.list(instagram_user_id=ig_user_id, limit=1)
+        return rows[0] if rows else None
+
 
 class FacebookPostRepository(BaseRepository[FacebookPost]):
     model = FacebookPost

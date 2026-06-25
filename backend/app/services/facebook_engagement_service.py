@@ -8,6 +8,7 @@ likes them and/or posts an AI-generated reply. State is tracked in
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import TypedDict
 
 import httpx
 from sqlalchemy.orm import Session
@@ -17,7 +18,7 @@ from app.core.exceptions import FacebookException, NotFoundException
 from app.core.logger import get_logger
 from app.core.security import decrypt_secret
 from app.models.integration import FacebookPage
-from app.models.memory import CHANNEL_COMMENT, Conversation
+from app.models.memory import CHANNEL_COMMENT, CHANNEL_IG_COMMENT, Conversation
 from app.prompts.defaults import DEFAULT_REPLY_PROMPT, DEFAULT_REPLY_WITH_MEMORY_PROMPT
 from app.prompts.engine import prompt_engine
 from app.repositories.repositories import (
@@ -30,6 +31,15 @@ from app.services.memory.service import MemoryService
 from app.utils.text import strip_markdown
 
 log = get_logger("facebook")
+
+
+class EngageResult(TypedDict):
+    """Outcome of a single engagement run: counts plus an optional page error."""
+
+    processed: int
+    scanned: int
+    skipped: int
+    error: str | None
 
 
 class FacebookEngagementService:
@@ -53,6 +63,8 @@ class FacebookEngagementService:
         auto_like_comments: bool | None = None,
         auto_reply_comments: bool | None = None,
         auto_reply_messages: bool | None = None,
+        auto_reply_ig_comments: bool | None = None,
+        auto_reply_ig_messages: bool | None = None,
         reply_persona: str | None = None,
         engage_interval_minutes: int | None = None,
         engage_max_actions: int | None = None,
@@ -66,6 +78,10 @@ class FacebookEngagementService:
             page.auto_reply_comments = auto_reply_comments
         if auto_reply_messages is not None:
             page.auto_reply_messages = auto_reply_messages
+        if auto_reply_ig_comments is not None:
+            page.auto_reply_ig_comments = auto_reply_ig_comments
+        if auto_reply_ig_messages is not None:
+            page.auto_reply_ig_messages = auto_reply_ig_messages
         if reply_persona is not None:
             page.reply_persona = reply_persona.strip() or None
         if engage_interval_minutes is not None:
@@ -98,25 +114,58 @@ class FacebookEngagementService:
         interval = max(1, int(page.engage_interval_minutes or 30))
         return now - last >= timedelta(minutes=interval)
 
+    @staticmethod
+    def _has_comment_engagement(page: FacebookPage) -> bool:
+        return bool(
+            page.auto_like_comments
+            or page.auto_reply_comments
+            or (page.auto_reply_ig_comments and page.instagram_user_id)
+        )
+
     async def engage_all(self) -> int:
         """Process every enabled page whose per-page interval is due."""
         now = datetime.now(timezone.utc)
         pages = [
             p
             for p in self.pages.list(limit=None)
-            if p.enabled
-            and (p.auto_like_comments or p.auto_reply_comments)
-            and self._is_due(p, now)
+            if p.enabled and self._has_comment_engagement(p) and self._is_due(p, now)
         ]
         total = 0
         for page in pages:
             try:
-                total += int((await self.engage_page(page))["processed"])
+                total += (await self.engage_page_all(page))["processed"]
             except Exception as exc:  # noqa: BLE001 - one bad page must not stop others
                 log.error(f"Engagement failed for page {page.page_id}: {exc}")
         return total
 
-    async def engage_page(self, page: FacebookPage) -> dict[str, object]:
+    async def engage_page_all(self, page: FacebookPage) -> EngageResult:
+        """Run Facebook and/or Instagram comment engagement per the page toggles.
+
+        Merges the per-platform counts so the manual "engage now" trigger and the
+        poller report a single combined result.
+        """
+        processed = scanned = skipped = 0
+        error: str | None = None
+        if page.auto_like_comments or page.auto_reply_comments:
+            r = await self.engage_page(page)
+            processed += r["processed"]
+            scanned += r["scanned"]
+            skipped += r["skipped"]
+            error = error or r["error"]
+        if page.auto_reply_ig_comments and page.instagram_user_id:
+            r = await self.engage_page_instagram(page)
+            processed += r["processed"]
+            scanned += r["scanned"]
+            skipped += r["skipped"]
+            error = error or r["error"]
+        return {
+            "processed": processed,
+            "scanned": scanned,
+            "skipped": skipped,
+            "error": error,
+        }
+
+    async def engage_page(self, page: FacebookPage) -> EngageResult:
         """Scan the page's recent posts and act on any unseen comments.
 
         Returns ``{processed, scanned, skipped, error}``: comments newly acted
@@ -223,10 +272,118 @@ class FacebookEngagementService:
         self.db.commit()
         return True
 
+    # --- Instagram comments ---
+
+    async def engage_page_instagram(self, page: FacebookPage) -> EngageResult:
+        """Scan the linked Instagram account's recent media and reply to comments.
+
+        Instagram exposes no comment "like" via the API, so this only auto-replies.
+        Shares the ``facebook_comments`` dedup table (IG comment ids are distinct).
+        """
+        token = decrypt_secret(page.access_token_encrypted)
+        page.last_engaged_at = datetime.now(timezone.utc)
+        self.db.commit()
+        try:
+            media = await self._fetch_ig_media(page.instagram_user_id or "", token)
+        except FacebookException as exc:
+            log.warning(f"Could not list IG media for {page.instagram_user_id}: {exc}")
+            return {"processed": 0, "scanned": 0, "skipped": 0, "error": str(exc)}
+
+        cap = max(1, int(page.engage_max_actions or 25))
+        processed = 0
+        skipped = 0
+        for item in media:
+            if processed >= cap:
+                break
+            media_id = str(item.get("id", ""))
+            if not media_id:
+                continue
+            try:
+                comments = await self._fetch_ig_comments(media_id, token)
+            except FacebookException as exc:
+                skipped += 1
+                log.warning(f"Skipping IG media {media_id}: {exc}")
+                continue
+            caption = str(item.get("caption") or "")
+            for comment in comments:
+                if processed >= cap:
+                    break
+                if await self._process_ig_comment(page, media_id, caption, comment, token):
+                    processed += 1
+        if processed:
+            log.info(
+                f"Replied to {processed} new IG comment(s) for {page.instagram_user_id}"
+            )
+        return {
+            "processed": processed,
+            "scanned": len(media),
+            "skipped": skipped,
+            "error": None,
+        }
+
+    async def _process_ig_comment(
+        self,
+        page: FacebookPage,
+        media_id: str,
+        caption: str,
+        comment: dict,
+        token: str,
+    ) -> bool:
+        comment_id = str(comment.get("id", ""))
+        if not comment_id or self.comments.exists(comment_id):
+            return False
+        author = comment.get("from") or {}
+        author_id = str(author.get("id", ""))
+        username = comment.get("username") or author.get("username")
+        # Never reply to the IG account's own comments/replies.
+        if author_id and author_id == str(page.instagram_user_id):
+            return False
+        if username and username == page.instagram_username:
+            return False
+
+        message = (comment.get("text") or "").strip()
+        record = self.comments.create(
+            page_id=page.id,
+            facebook_post_id=media_id,
+            comment_id=comment_id,
+            commenter_name=username,
+            message=message or None,
+            processed_at=datetime.now(timezone.utc),
+        )
+        errors: list[str] = []
+        if message:
+            try:
+                reply, conversation = await self._build_reply(
+                    page,
+                    caption,
+                    message,
+                    {"id": author_id, "name": username},
+                    CHANNEL_IG_COMMENT,
+                )
+                if reply:
+                    await self._reply_ig_comment(comment_id, reply, token)
+                    record.replied = True
+                    record.reply_text = reply
+                    if conversation is not None and self.memory is not None:
+                        await self.memory.record_exchange(conversation, message, reply)
+            except Exception as exc:  # noqa: BLE001 - record failure, keep going
+                errors.append(f"reply: {exc}")
+
+        if errors:
+            record.status = "error"
+            record.error_message = "; ".join(errors)[:1000]
+        self.db.commit()
+        return True
+
     # --- AI reply ---
 
     async def _build_reply(
-        self, page: FacebookPage, post_message: str, comment: str, author: dict
+        self,
+        page: FacebookPage,
+        post_message: str,
+        comment: str,
+        author: dict,
+        channel: str = CHANNEL_COMMENT,
     ) -> tuple[str, Conversation | None]:
         """Generate a reply, personalized from memory when available.
 
@@ -253,7 +410,7 @@ class FacebookEngagementService:
         conversation = self.memory.get_conversation(
             project_id=page.project_id,
             page_id=page.id,
-            channel=CHANNEL_COMMENT,
+            channel=channel,
             external_user_id=fb_user_id,
             user_name=author.get("name"),
         )
@@ -314,6 +471,31 @@ class FacebookEngagementService:
     async def _reply_comment(self, comment_id: str, message: str, token: str) -> None:
         await self._post(
             f"{GRAPH_API}/{comment_id}/comments",
+            {"message": message, "access_token": token},
+        )
+
+    async def _fetch_ig_media(self, ig_user_id: str, token: str) -> list[dict]:
+        """List the IG account's own recent media (newest first)."""
+        params: dict[str, str | int] = {
+            "fields": "id,caption",
+            "limit": settings.facebook_engage_max_posts,
+            "access_token": token,
+        }
+        data = await self._get(f"{GRAPH_API}/{ig_user_id}/media", params)
+        return list(data.get("data", []))
+
+    async def _fetch_ig_comments(self, media_id: str, token: str) -> list[dict]:
+        params: dict[str, str | int] = {
+            "fields": "id,text,username,timestamp,from",
+            "limit": settings.facebook_engage_max_comments,
+            "access_token": token,
+        }
+        data = await self._get(f"{GRAPH_API}/{media_id}/comments", params)
+        return list(data.get("data", []))
+
+    async def _reply_ig_comment(self, comment_id: str, message: str, token: str) -> None:
+        await self._post(
+            f"{GRAPH_API}/{comment_id}/replies",
             {"message": message, "access_token": token},
         )
 

@@ -116,6 +116,8 @@ def update_engagement(
         auto_like_comments=payload.auto_like_comments,
         auto_reply_comments=payload.auto_reply_comments,
         auto_reply_messages=payload.auto_reply_messages,
+        auto_reply_ig_comments=payload.auto_reply_ig_comments,
+        auto_reply_ig_messages=payload.auto_reply_ig_messages,
         reply_persona=payload.reply_persona,
         engage_interval_minutes=payload.engage_interval_minutes,
         engage_max_actions=payload.engage_max_actions,
@@ -146,7 +148,7 @@ async def engage_now(
     page = svc.pages.get(page_id)
     if not page:
         raise NotFoundException("Facebook page not found")
-    result = await svc.engage_page(page)
+    result = await svc.engage_page_all(page)
     if result.get("error"):
         message = f"Could not read the page's posts. {str(result['error'])[:200]}"
     elif not result["scanned"]:
@@ -240,7 +242,9 @@ async def messenger_webhook(
         return {"status": "ok"}
     try:
         payload = json.loads(raw or b"{}")
-        if payload.get("object") == "page":
+        # "page" = Facebook Messenger, "instagram" = Instagram Direct; both share
+        # the same envelope and are routed by object inside enqueue_event.
+        if payload.get("object") in ("page", "instagram"):
             MessengerService(db).enqueue_event(payload)
     except Exception:  # noqa: BLE001 - never surface errors to Meta
         pass

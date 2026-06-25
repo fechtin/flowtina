@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.core.security import decrypt_secret
 from app.models.integration import FacebookPage, MessengerEvent
-from app.models.memory import CHANNEL_MESSENGER, Conversation
+from app.models.memory import CHANNEL_IG_MESSAGE, CHANNEL_MESSENGER, Conversation
 from app.prompts.defaults import (
     DEFAULT_DM_REPLY_PROMPT,
     DEFAULT_DM_REPLY_WITH_MEMORY_PROMPT,
@@ -83,30 +83,45 @@ class MessengerService:
     def enqueue_event(self, payload: dict) -> int:
         """Persist each inbound DM and return immediately; replies are sent later.
 
-        The webhook must answer Meta within seconds, so this does no AI/network
-        work — just dedupe-and-store. The inbox poller generates and sends the
-        replies out of band (see :meth:`process_inbox`).
+        Handles both Facebook Messenger (``object == "page"``) and Instagram
+        (``object == "instagram"``) webhooks: the two share the same envelope but
+        Instagram keys ``entry.id`` by the IG account id and is gated by a
+        separate per-page toggle. The webhook must answer Meta within seconds, so
+        this does no AI/network work — just dedupe-and-store. The inbox poller
+        generates and sends the replies out of band (see :meth:`process_inbox`).
         """
+        is_instagram = payload.get("object") == "instagram"
+        channel = CHANNEL_IG_MESSAGE if is_instagram else CHANNEL_MESSENGER
         queued = 0
         for entry in payload.get("entry", []) or []:
-            page = self.pages.get_by_fb_page_id(str(entry.get("id", "")))
-            if not page or not page.enabled or not page.auto_reply_messages:
+            entry_id = str(entry.get("id", ""))
+            if is_instagram:
+                page = self.pages.get_by_instagram_user_id(entry_id)
+                enabled = bool(page and page.enabled and page.auto_reply_ig_messages)
+                self_id = page.instagram_user_id if page else None
+            else:
+                page = self.pages.get_by_fb_page_id(entry_id)
+                enabled = bool(page and page.enabled and page.auto_reply_messages)
+                self_id = page.page_id if page else None
+            if not page or not enabled:
                 continue
             for event in entry.get("messaging", []) or []:
-                if self._enqueue_one(page, event):
+                if self._enqueue_one(page, event, channel, self_id):
                     queued += 1
         if queued:
             self.db.commit()
         return queued
 
-    def _enqueue_one(self, page: FacebookPage, event: dict) -> bool:
+    def _enqueue_one(
+        self, page: FacebookPage, event: dict, channel: str, self_id: str | None
+    ) -> bool:
         sender_id = str((event.get("sender") or {}).get("id", ""))
         message = event.get("message") or {}
         text = (message.get("text") or "").strip()
         # Skip echoes of our own messages, delivery/read receipts and non-text.
         if message.get("is_echo") or not sender_id or not text:
             return False
-        if sender_id == page.page_id:
+        if self_id and sender_id == self_id:
             return False
         mid = message.get("mid")
         # Meta retries webhook delivery on slow responses; the unique mid makes
@@ -115,6 +130,7 @@ class MessengerService:
             return False
         self.events.create(
             page_id=page.id,
+            channel=channel,
             sender_id=sender_id,
             mid=str(mid) if mid else None,
             text=text[:_MAX_INBOUND_CHARS],
@@ -154,7 +170,12 @@ class MessengerService:
         self, page_id: str, sender_id: str, events: list[MessengerEvent]
     ) -> bool:
         page = self.pages.get(page_id)
-        if not page or not page.enabled or not page.auto_reply_messages:
+        channel = events[0].channel or CHANNEL_MESSENGER
+        is_instagram = channel == CHANNEL_IG_MESSAGE
+        enabled = page and page.enabled and (
+            page.auto_reply_ig_messages if is_instagram else page.auto_reply_messages
+        )
+        if not page or not enabled:
             # Page was removed or auto-reply turned off after queueing: drop these.
             self._finish(events, "processed")
             self.db.commit()
@@ -163,14 +184,17 @@ class MessengerService:
         ordered = sorted(events, key=lambda e: _as_utc(e.created_at))
         combined = "\n".join(e.text for e in ordered[: settings.messenger_coalesce_max])
         token = decrypt_secret(page.access_token_encrypted)
+        url = self._messages_url(page, is_instagram)
         try:
             # Acknowledge the follower so the bubble shows "Seen" + typing while we
             # generate; both are best-effort and never block the actual reply.
-            await self._send_action(sender_id, "mark_seen", token)
-            await self._send_action(sender_id, "typing_on", token)
-            reply, conversation = await self._build_reply(page, sender_id, combined)
+            await self._send_action(url, sender_id, "mark_seen", token)
+            await self._send_action(url, sender_id, "typing_on", token)
+            reply, conversation = await self._build_reply(
+                page, sender_id, combined, channel
+            )
             if reply:
-                await self._send(sender_id, reply, token)
+                await self._send(url, sender_id, reply, token)
                 if conversation is not None and self.memory is not None:
                     await self.memory.record_exchange(conversation, combined, reply)
             self._finish(events, "processed")
@@ -203,7 +227,7 @@ class MessengerService:
     # --- AI reply ---
 
     async def _build_reply(
-        self, page: FacebookPage, sender_id: str, text: str
+        self, page: FacebookPage, sender_id: str, text: str, channel: str
     ) -> tuple[str, Conversation | None]:
         persona = (
             f"Voice and guidance: {page.reply_persona}" if page.reply_persona else ""
@@ -218,7 +242,7 @@ class MessengerService:
         conversation = self.memory.get_conversation(
             project_id=page.project_id,
             page_id=page.id,
-            channel=CHANNEL_MESSENGER,
+            channel=channel,
             external_user_id=sender_id,
         )
         # First contact: use the plain prompt so the reply does not pretend to
@@ -251,8 +275,18 @@ class MessengerService:
 
     # --- Send API ---
 
-    async def _send(self, recipient_id: str, message: str, token: str) -> None:
-        url = f"{GRAPH_API}/me/messages"
+    @staticmethod
+    def _messages_url(page: FacebookPage, is_instagram: bool) -> str:
+        """Select the Send endpoint: Instagram posts to the IG account id.
+
+        Both use the page access token; Facebook Messenger uses ``/me/messages``
+        while Instagram messaging targets ``/{ig-user-id}/messages``.
+        """
+        if is_instagram:
+            return f"{GRAPH_API}/{page.instagram_user_id}/messages"
+        return f"{GRAPH_API}/me/messages"
+
+    async def _send(self, url: str, recipient_id: str, message: str, token: str) -> None:
         payload = {
             "recipient": {"id": recipient_id},
             "messaging_type": "RESPONSE",
@@ -263,9 +297,10 @@ class MessengerService:
         if resp.status_code >= 400:
             raise RuntimeError(f"Send API HTTP {resp.status_code}: {resp.text[:300]}")
 
-    async def _send_action(self, recipient_id: str, action: str, token: str) -> None:
+    async def _send_action(
+        self, url: str, recipient_id: str, action: str, token: str
+    ) -> None:
         """Send a sender_action (mark_seen / typing_on). Best-effort, never raises."""
-        url = f"{GRAPH_API}/me/messages"
         payload = {"recipient": {"id": recipient_id}, "sender_action": action}
         try:
             async with httpx.AsyncClient(timeout=10) as client:

@@ -124,7 +124,37 @@ Instagram is stricter than Facebook feed posts:
 
 ---
 
-## 8. Quick checklist
+## 8. Comment & DM auto-reply (optional)
+
+Beyond publishing, Flowtina can auto-reply to Instagram **comments** and **direct
+messages**, mirroring the Facebook comment engagement and Messenger DM features.
+Enable them per page under **Pages → a Page → Engagement** (the Instagram toggles
+appear once an IG account is linked).
+
+| Feature | How it runs | Extra scope | App Review |
+| --- | --- | --- | --- |
+| Comment auto-reply | Polls the IG account's recent media and replies to new comments (`POST /{ig-comment-id}/replies`). No webhook needed. | `instagram_manage_comments` | Required for public use |
+| DM auto-reply | Webhook-driven: Meta delivers Instagram messages to the same callback as Messenger; replies go out via `POST /{ig-user-id}/messages`. | `instagram_manage_messages` | Required for public use |
+
+Instagram does not expose a comment "like" via the API, so only auto-reply is
+available for IG (no auto-like).
+
+### Webhook for Instagram DMs
+
+DMs (not comments) need the Instagram webhook configured in the Meta App:
+
+1. **Products → Webhooks → Instagram** (or **Messenger → Instagram settings**).
+2. **Callback URL:** `https://flowtina.fechtin.com/api/v1/messenger/webhook`
+   (the same endpoint as Messenger — it routes `object == "instagram"` events).
+3. **Verify Token:** the value of `MESSENGER_VERIFY_TOKEN`.
+4. Subscribe to the **`messages`** field and connect the Instagram account.
+
+The webhook handler ignores comment webhooks; comment auto-reply uses polling, so
+you do **not** need to subscribe to the `comments` field for it to work.
+
+---
+
+## 9. Quick checklist
 
 - [ ] Instagram account is **Business/Creator** and **linked to the Page**.
 - [ ] Token has `instagram_basic` + `instagram_content_publish`; Page re‑imported.

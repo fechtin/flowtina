@@ -29,6 +29,8 @@ MEMORY_TYPES = ("semantic", "episodic", "emotional", "relationship")
 # Conversation channels.
 CHANNEL_COMMENT = "comment"
 CHANNEL_MESSENGER = "messenger"
+CHANNEL_IG_COMMENT = "ig_comment"
+CHANNEL_IG_MESSAGE = "ig_dm"
 
 
 class Conversation(Base, BaseModelMixin):

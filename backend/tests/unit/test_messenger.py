@@ -49,10 +49,12 @@ def _wire(service: MessengerService) -> list:
     )
     sent: list = []
 
-    async def _fake_send(recipient_id: str, message: str, token: str) -> None:
+    async def _fake_send(url: str, recipient_id: str, message: str, token: str) -> None:
         sent.append((recipient_id, message, token))
 
-    async def _fake_action(recipient_id: str, action: str, token: str) -> None:
+    async def _fake_action(
+        url: str, recipient_id: str, action: str, token: str
+    ) -> None:
         return None
 
     service._send = _fake_send  # type: ignore[method-assign]
@@ -176,6 +178,65 @@ def test_first_contact_uses_plain_prompt_then_memory(db_session, monkeypatch):
     service.enqueue_event(_payload(text="Tell me more", mid="b"))
     asyncio.run(service.process_inbox())
     assert marker in prompts[-1]  # now remembered -> memory-aware prompt
+
+
+def test_instagram_dm_replies_via_ig_endpoint(db_session, monkeypatch):
+    """An object=="instagram" webhook is routed by IG account id and replied to
+    through the Instagram Send endpoint, gated by its own toggle."""
+    monkeypatch.setattr(settings, "messenger_debounce_seconds", 0)
+    _make_page(
+        db_session,
+        instagram_user_id="ig-77",
+        instagram_username="myinsta",
+        auto_reply_messages=False,
+        auto_reply_ig_messages=True,
+    )
+    service = MessengerService(db_session)
+    _wire(service)
+    captured: list = []
+
+    async def _capture_send(url: str, recipient_id: str, message: str, token: str) -> None:
+        captured.append((url, recipient_id, message))
+
+    service._send = _capture_send  # type: ignore[method-assign]
+
+    payload = {
+        "object": "instagram",
+        "entry": [
+            {
+                "id": "ig-77",
+                "messaging": [
+                    {"sender": {"id": "igsid-1"}, "message": {"text": "hello", "mid": "ig-m1"}}
+                ],
+            }
+        ],
+    }
+    assert service.enqueue_event(payload) == 1
+    ev = MessengerEventRepository(db_session).list_pending()[0]
+    assert ev.channel == "ig_dm"
+
+    assert asyncio.run(service.process_inbox()) == 1
+    assert captured and "ig-77/messages" in captured[0][0]  # IG Send endpoint
+    assert captured[0][1] == "igsid-1"
+
+
+def test_instagram_dm_ignored_when_ig_toggle_off(db_session):
+    """IG DMs are not queued when only the Facebook DM toggle is on."""
+    _make_page(
+        db_session,
+        instagram_user_id="ig-77",
+        auto_reply_messages=True,
+        auto_reply_ig_messages=False,
+    )
+    service = MessengerService(db_session)
+    _wire(service)
+    payload = {
+        "object": "instagram",
+        "entry": [
+            {"id": "ig-77", "messaging": [{"sender": {"id": "igsid-1"}, "message": {"text": "hi"}}]}
+        ],
+    }
+    assert service.enqueue_event(payload) == 0
 
 
 def test_rapid_messages_coalesce_into_one_reply(db_session, monkeypatch):
