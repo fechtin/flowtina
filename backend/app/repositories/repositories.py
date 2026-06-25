@@ -11,6 +11,7 @@ from app.models.integration import (
     FacebookComment,
     FacebookPage,
     FacebookPost,
+    MessengerEvent,
     Notification,
     Report,
     SystemLog,
@@ -196,6 +197,19 @@ class FacebookCommentRepository(BaseRepository[FacebookComment]):
 
     def list_for_page(self, page_id: str, limit: int = 50) -> list[FacebookComment]:
         return self.list(page_id=page_id, order_by="created_at", desc=True, limit=limit)
+
+
+class MessengerEventRepository(BaseRepository[MessengerEvent]):
+    model = MessengerEvent
+
+    def exists_by_mid(self, mid: str) -> bool:
+        """True if a message with this Meta id was already queued (dedupe retries)."""
+        stmt = select(func.count()).select_from(MessengerEvent).where(MessengerEvent.mid == mid)
+        return bool(self.db.execute(stmt).scalar())
+
+    def list_pending(self, limit: int = 200) -> list[MessengerEvent]:
+        """Oldest-first pending messages for the background reply poller."""
+        return self.list(status="pending", order_by="created_at", desc=False, limit=limit)
 
 
 class ConversationRepository(BaseRepository[Conversation]):

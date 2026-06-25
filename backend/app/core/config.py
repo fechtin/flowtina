@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     # Token echoed back during Meta's webhook verification (GET challenge). Set
     # the same value in the Messenger webhook config on the Meta dashboard.
     messenger_verify_token: str = ""
+    # --- Messenger DM auto-reply (webhook enqueues, poller replies) ---
+    # How often the inbox poller ticks to send queued DM replies, in seconds.
+    # Small so replies feel prompt; the job is single-instance so it never piles up.
+    messenger_inbox_tick_seconds: int = 5
+    # A follower's messages are coalesced into one reply once they have paused for
+    # this many seconds (debounce), so rapid-fire lines get a single, in-context reply.
+    messenger_debounce_seconds: int = 6
+    # Safety cap: at most this many queued messages are merged into one reply turn.
+    messenger_coalesce_max: int = 10
+    # Stop retrying a message after this many failed send attempts.
+    messenger_max_attempts: int = 3
     # --- Comment auto-engagement (poller) ---
     # How often the scheduler "ticks" to look for pages due for engagement. The
     # actual cadence is per-page (FacebookPage.engage_interval_minutes); this is

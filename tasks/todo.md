@@ -33,3 +33,25 @@ layers, SQLite-first, low memory, no Docker/Redis/Celery.
 - [x] Final summary to user — COMPLETE, ready for review
 </content>
 </invoke>
+
+---
+
+## Messenger continuous auto-reply — hardening + Meta setup (2026-06-25)
+Webhook only enqueues; a scheduler job processes with debounce+coalesce+dedup+retry.
+- [x] 1. Model `MessengerEvent` (models/integration.py)
+- [x] 2. Migration: table `messenger_events`
+- [x] 3. `MessengerEventRepository` (exists_by_mid, list_pending)
+- [x] 4. Config flags (inbox tick / debounce / coalesce / max_attempts)
+- [x] 5. MessengerService: enqueue_event() + process_inbox() + _send_action (mark_seen/typing)
+- [x] 6. Webhook -> enqueue_event (return 200 fast)
+- [x] 7. Scheduler job process_messenger_inbox + jobs.py task
+- [x] 8. Update + run tests
+- [x] 9. docs/messenger-setup.md (App Review pages_messaging, webhook+page subscribe, scopes, 24h window)
+
+### Review (Messenger continuous auto-reply)
+- Webhook is now fire-and-forget: enqueue + 200, no AI/network in request path.
+- Poller process_messenger_inbox (every 5s, single-instance) debounces 6s, coalesces
+  rapid-fire DMs into one reply, dedupes by Meta mid, retries up to 3x, shows seen/typing.
+- Tests: 8 messenger + full suite 63 pass; ruff clean; migration d7a8b9c0e1f2 applies.
+- Real-world blocker is config not code: App Review for pages_messaging + Live mode +
+  page subscribed_apps -> docs/messenger-setup.md.

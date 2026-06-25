@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy.orm import Session
@@ -17,14 +18,17 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.core.security import decrypt_secret
-from app.models.integration import FacebookPage
+from app.models.integration import FacebookPage, MessengerEvent
 from app.models.memory import CHANNEL_MESSENGER, Conversation
 from app.prompts.defaults import (
     DEFAULT_DM_REPLY_PROMPT,
     DEFAULT_DM_REPLY_WITH_MEMORY_PROMPT,
 )
 from app.prompts.engine import prompt_engine
-from app.repositories.repositories import FacebookPageRepository
+from app.repositories.repositories import (
+    FacebookPageRepository,
+    MessengerEventRepository,
+)
 from app.services.ai_service import AIService
 from app.services.facebook_service import GRAPH_API
 from app.services.memory.service import MemoryService
@@ -34,6 +38,13 @@ log = get_logger("facebook")
 
 # Messenger hard limit on a single text message.
 _MAX_MESSAGE_CHARS = 2000
+# Cap on stored inbound text so a huge paste cannot bloat the queue.
+_MAX_INBOUND_CHARS = 4000
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Treat a stored (possibly tz-naive, from SQLite) timestamp as UTC."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class MessengerService:
@@ -42,6 +53,7 @@ class MessengerService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.pages = FacebookPageRepository(db)
+        self.events = MessengerEventRepository(db)
         self.ai = AIService(db)
         self.memory = MemoryService(db) if settings.memory_enabled else None
 
@@ -66,24 +78,28 @@ class MessengerService:
         expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature_header.split("=", 1)[1])
 
-    # --- event handling ---
+    # --- enqueue (webhook path, fast) ---
 
-    async def handle_event(self, payload: dict) -> int:
-        """Process a webhook payload; returns the number of replies sent."""
-        sent = 0
+    def enqueue_event(self, payload: dict) -> int:
+        """Persist each inbound DM and return immediately; replies are sent later.
+
+        The webhook must answer Meta within seconds, so this does no AI/network
+        work — just dedupe-and-store. The inbox poller generates and sends the
+        replies out of band (see :meth:`process_inbox`).
+        """
+        queued = 0
         for entry in payload.get("entry", []) or []:
             page = self.pages.get_by_fb_page_id(str(entry.get("id", "")))
             if not page or not page.enabled or not page.auto_reply_messages:
                 continue
             for event in entry.get("messaging", []) or []:
-                try:
-                    if await self._process_event(page, event):
-                        sent += 1
-                except Exception as exc:  # noqa: BLE001 - one bad event must not abort the batch
-                    log.warning(f"Messenger event failed on page {page.page_id}: {exc}")
-        return sent
+                if self._enqueue_one(page, event):
+                    queued += 1
+        if queued:
+            self.db.commit()
+        return queued
 
-    async def _process_event(self, page: FacebookPage, event: dict) -> bool:
+    def _enqueue_one(self, page: FacebookPage, event: dict) -> bool:
         sender_id = str((event.get("sender") or {}).get("id", ""))
         message = event.get("message") or {}
         text = (message.get("text") or "").strip()
@@ -92,16 +108,97 @@ class MessengerService:
             return False
         if sender_id == page.page_id:
             return False
-
-        token = decrypt_secret(page.access_token_encrypted)
-        reply, conversation = await self._build_reply(page, sender_id, text)
-        if not reply:
+        mid = message.get("mid")
+        # Meta retries webhook delivery on slow responses; the unique mid makes
+        # re-delivery a no-op so a follower is never answered twice.
+        if mid and self.events.exists_by_mid(str(mid)):
             return False
-        await self._send(sender_id, reply, token)
-        if conversation is not None and self.memory is not None:
-            await self.memory.record_exchange(conversation, text, reply)
-        self.db.commit()
+        self.events.create(
+            page_id=page.id,
+            sender_id=sender_id,
+            mid=str(mid) if mid else None,
+            text=text[:_MAX_INBOUND_CHARS],
+        )
         return True
+
+    # --- inbox poller (background reply path) ---
+
+    async def process_inbox(self) -> int:
+        """Reply to queued DMs that have settled, coalescing per follower.
+
+        Returns the number of followers replied to this run. A follower's
+        messages are held until they pause for ``messenger_debounce_seconds`` so
+        rapid-fire lines become one in-context reply; messages whose previous
+        send failed are retried regardless of the debounce window.
+        """
+        pending = self.events.list_pending()
+        if not pending:
+            return 0
+        groups: dict[tuple[str, str], list[MessengerEvent]] = {}
+        for ev in pending:
+            groups.setdefault((ev.page_id, ev.sender_id), []).append(ev)
+
+        now = datetime.now(timezone.utc)
+        debounce = timedelta(seconds=settings.messenger_debounce_seconds)
+        sent = 0
+        for (page_id, sender_id), events in groups.items():
+            newest = max(_as_utc(ev.created_at) for ev in events)
+            retrying = any(ev.attempts > 0 for ev in events)
+            if not retrying and (now - newest) < debounce:
+                continue  # follower may still be typing — wait for the next tick
+            if await self._reply_to_group(page_id, sender_id, events):
+                sent += 1
+        return sent
+
+    async def _reply_to_group(
+        self, page_id: str, sender_id: str, events: list[MessengerEvent]
+    ) -> bool:
+        page = self.pages.get(page_id)
+        if not page or not page.enabled or not page.auto_reply_messages:
+            # Page was removed or auto-reply turned off after queueing: drop these.
+            self._finish(events, "processed")
+            self.db.commit()
+            return False
+
+        ordered = sorted(events, key=lambda e: _as_utc(e.created_at))
+        combined = "\n".join(e.text for e in ordered[: settings.messenger_coalesce_max])
+        token = decrypt_secret(page.access_token_encrypted)
+        try:
+            # Acknowledge the follower so the bubble shows "Seen" + typing while we
+            # generate; both are best-effort and never block the actual reply.
+            await self._send_action(sender_id, "mark_seen", token)
+            await self._send_action(sender_id, "typing_on", token)
+            reply, conversation = await self._build_reply(page, sender_id, combined)
+            if reply:
+                await self._send(sender_id, reply, token)
+                if conversation is not None and self.memory is not None:
+                    await self.memory.record_exchange(conversation, combined, reply)
+            self._finish(events, "processed")
+            self.db.commit()
+            return bool(reply)
+        except Exception as exc:  # noqa: BLE001 - retry/cap instead of losing the message
+            self.db.rollback()
+            self._fail(events, str(exc))
+            self.db.commit()
+            log.warning(
+                f"Messenger reply failed (page {page.page_id}, sender {sender_id}): {exc}"
+            )
+            return False
+
+    def _finish(self, events: list[MessengerEvent], status: str) -> None:
+        now = datetime.now(timezone.utc)
+        for ev in events:
+            ev.status = status
+            ev.processed_at = now
+
+    def _fail(self, events: list[MessengerEvent], error: str) -> None:
+        now = datetime.now(timezone.utc)
+        for ev in events:
+            ev.attempts += 1
+            ev.error_message = error[:1000]
+            if ev.attempts >= settings.messenger_max_attempts:
+                ev.status = "failed"  # give up so it stops blocking the queue
+                ev.processed_at = now
 
     # --- AI reply ---
 
@@ -155,3 +252,13 @@ class MessengerService:
             resp = await client.post(url, params={"access_token": token}, json=payload)
         if resp.status_code >= 400:
             raise RuntimeError(f"Send API HTTP {resp.status_code}: {resp.text[:300]}")
+
+    async def _send_action(self, recipient_id: str, action: str, token: str) -> None:
+        """Send a sender_action (mark_seen / typing_on). Best-effort, never raises."""
+        url = f"{GRAPH_API}/me/messages"
+        payload = {"recipient": {"id": recipient_id}, "sender_action": action}
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(url, params={"access_token": token}, json=payload)
+        except Exception as exc:  # noqa: BLE001 - cosmetic ack, must not block the reply
+            log.debug(f"sender_action {action} failed for {recipient_id}: {exc}")

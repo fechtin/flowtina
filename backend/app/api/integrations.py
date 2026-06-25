@@ -214,8 +214,9 @@ async def messenger_webhook(
 ):
     """Public endpoint Meta calls with incoming Messenger events.
 
-    Authenticated via the app-secret HMAC signature. Always returns 200 so Meta
-    does not retry; processing errors are swallowed and logged.
+    Authenticated via the app-secret HMAC signature. Only queues the messages and
+    returns 200 immediately so Meta never times out or retries; the scheduler's
+    inbox poller debounces, deduplicates and sends the replies out of band.
     """
     raw = await request.body()
     if not MessengerService.verify_signature(raw, x_hub_signature_256):
@@ -223,7 +224,7 @@ async def messenger_webhook(
     try:
         payload = json.loads(raw or b"{}")
         if payload.get("object") == "page":
-            await MessengerService(db).handle_event(payload)
+            MessengerService(db).enqueue_event(payload)
     except Exception:  # noqa: BLE001 - never surface errors to Meta
         pass
     return {"status": "ok"}

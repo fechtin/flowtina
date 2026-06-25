@@ -63,6 +63,33 @@ class FacebookComment(Base, BaseModelMixin):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class MessengerEvent(Base, BaseModelMixin):
+    """One inbound Messenger DM, queued by the webhook for background reply.
+
+    The webhook persists each message and returns 200 immediately; a scheduler
+    job then debounces (coalesces a follower's rapid-fire messages into a single
+    reply), deduplicates by Meta's message id and retries failed sends. This
+    keeps the public webhook fast and prevents duplicate or storm replies when a
+    fan types many messages in a row.
+    """
+
+    __tablename__ = "messenger_events"
+
+    # Internal FacebookPage.id (not the Facebook page id) the message arrived on.
+    page_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    # The follower's page-scoped id (PSID) we reply to.
+    sender_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    # Meta's per-message id; unique so retried webhook deliveries are ignored.
+    mid: Mapped[str | None] = mapped_column(String(191), unique=True, nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # pending -> processed | failed. Indexed: the poller scans pending rows.
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True, nullable=False)
+    # Send attempts so far; capped to stop retrying a permanently failing message.
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class FacebookPost(Base, BaseModelMixin):
     __tablename__ = "facebook_posts"
 

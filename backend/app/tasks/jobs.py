@@ -92,6 +92,21 @@ def engage_comments() -> None:
         db.close()
 
 
+def process_messenger_inbox() -> None:
+    """Send queued Messenger DM replies (debounced + coalesced per follower)."""
+    from app.services.messenger_service import MessengerService
+
+    db = SessionLocal()
+    try:
+        sent = _run_async(MessengerService(db).process_inbox())
+        if sent:
+            log.info(f"Messenger inbox sent {sent} repl(y/ies)")
+    except Exception as exc:  # noqa: BLE001 - DM auto-reply is best-effort
+        log.warning(f"Messenger inbox run failed: {exc}")
+    finally:
+        db.close()
+
+
 def consolidate_memories() -> None:
     """Nightly: decay, archive and re-summarize each follower's long-term memory."""
     from app.repositories.repositories import ConversationRepository

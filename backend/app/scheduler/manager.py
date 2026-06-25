@@ -118,6 +118,12 @@ class SchedulerManager:
             id="maintenance_engage_comments",
             replace_existing=True,
         )
+        self.scheduler.add_job(
+            task_jobs.process_messenger_inbox,
+            trigger=IntervalTrigger(seconds=settings.messenger_inbox_tick_seconds),
+            id="maintenance_process_messenger_inbox",
+            replace_existing=True,
+        )
         if settings.memory_enabled:
             self.scheduler.add_job(
                 task_jobs.consolidate_memories,
