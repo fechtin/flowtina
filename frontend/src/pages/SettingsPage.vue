@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Sun, Moon, Loader2, RefreshCw } from 'lucide-vue-next'
+import { Sun, Moon, Loader2, RefreshCw, Check } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import { providerService, settingsService } from '@/services'
@@ -235,7 +235,15 @@ async function save() {
         </p>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label class="label">{{ t('settings.defaultApiKey') }}</label>
+            <label class="label flex items-center gap-2">
+              {{ t('settings.defaultApiKey') }}
+              <span
+                v-if="apiKeySet"
+                class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-400"
+              >
+                <Check class="h-3 w-3" /> {{ t('settings.secretSaved') }}
+              </span>
+            </label>
             <input
               v-model="apiKeyInput"
               type="password"
@@ -243,6 +251,9 @@ async function save() {
               class="input"
               :placeholder="apiKeySet ? '••••••••' : t('settings.notConfigured')"
             />
+            <p v-if="apiKeySet" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('settings.secretKeepHint') }}
+            </p>
           </div>
           <div>
             <label class="label">{{ t('settings.defaultBaseUrl') }}</label>
@@ -271,7 +282,15 @@ async function save() {
           </label>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label class="label">{{ t('settings.telegramBotToken') }}</label>
+              <label class="label flex items-center gap-2">
+                {{ t('settings.telegramBotToken') }}
+                <span
+                  v-if="telegramTokenSet"
+                  class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                >
+                  <Check class="h-3 w-3" /> {{ t('settings.secretSaved') }}
+                </span>
+              </label>
               <input
                 v-model="telegramTokenInput"
                 type="password"
@@ -279,6 +298,9 @@ async function save() {
                 class="input"
                 :placeholder="telegramTokenSet ? '••••••••' : t('settings.notConfigured')"
               />
+              <p v-if="telegramTokenSet" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('settings.secretKeepHint') }}
+              </p>
             </div>
             <div>
               <label class="label">{{ t('settings.telegramChatId') }}</label>

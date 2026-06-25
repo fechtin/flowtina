@@ -336,6 +336,8 @@ export default {
     fallbackHint:
       'Used for projects that have no setting of their own. Project-specific settings always take priority.',
     notConfigured: 'Not configured',
+    secretSaved: 'Saved',
+    secretKeepHint: 'A value is saved. Leave blank to keep it, or type a new value to replace it.',
   },
   profile: {
     title: 'Profile',

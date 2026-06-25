@@ -336,6 +336,8 @@ export default {
     fallbackHint:
       'Dùng cho các dự án không có cấu hình riêng. Cấu hình riêng của dự án luôn được ưu tiên.',
     notConfigured: 'Chưa cấu hình',
+    secretSaved: 'Đã lưu',
+    secretKeepHint: 'Đã có giá trị được lưu. Để trống để giữ nguyên, hoặc nhập giá trị mới để thay thế.',
   },
   profile: {
     title: 'Hồ sơ',
