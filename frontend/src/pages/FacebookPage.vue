@@ -280,7 +280,7 @@ async function doDelete() {
           <label class="label">{{ t('facebook.replyPersona') }}</label>
           <textarea
             v-model="engageForm.reply_persona"
-            rows="3"
+            rows="6"
             class="input text-sm"
             :placeholder="t('facebook.replyPersonaPlaceholder')"
           />
