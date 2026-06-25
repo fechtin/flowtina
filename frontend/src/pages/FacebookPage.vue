@@ -5,6 +5,7 @@ import {
   Plus,
   Trash2,
   Facebook,
+  Instagram,
   DownloadCloud,
   ExternalLink,
   CheckCircle2,
@@ -142,6 +143,20 @@ const comments = ref<FacebookComment[]>([])
 const { loading: savingEngage, run: runEngage } = useAsync()
 const { loading: engagingNow, run: runEngageNow } = useAsync()
 
+// --- Cross-post platforms (Facebook / Instagram of the same page) ---
+const platformForm = reactive({ publish_facebook: true, publish_instagram: false })
+const { loading: savingPlatforms, run: runPlatforms } = useAsync()
+const hasInstagram = computed(() => !!engagePage.value?.instagram_user_id)
+
+async function savePlatforms() {
+  if (!engagePage.value) return
+  const updated = await runPlatforms(
+    () => facebookService.updatePlatforms(engagePage.value!.id, { ...platformForm }),
+    { successMessage: t('facebook.platformsSaved') },
+  )
+  if (updated !== undefined) await load()
+}
+
 // Keep the inline form in sync with the project's page as it loads/reloads.
 watch(
   engagePage,
@@ -156,6 +171,8 @@ watch(
     engageForm.reply_persona = page.reply_persona ?? ''
     engageForm.engage_interval_minutes = page.engage_interval_minutes ?? 30
     engageForm.engage_max_actions = page.engage_max_actions ?? 25
+    platformForm.publish_facebook = page.publish_facebook ?? true
+    platformForm.publish_instagram = !!page.publish_instagram
     void loadComments(page.id)
   },
   { immediate: true },
@@ -243,6 +260,57 @@ async function doDelete() {
         <button class="btn-ghost text-red-600" @click="confirmDelete(engagePage.id)">
           <Trash2 class="h-4 w-4" />
         </button>
+      </div>
+
+      <!-- Cross-post platforms: one post publishes to every enabled platform -->
+      <div class="card space-y-4 p-5">
+        <div>
+          <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('facebook.platformsTitle') }}</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('facebook.platformsHint') }}</p>
+        </div>
+
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <input v-model="platformForm.publish_facebook" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-white">
+              <Facebook class="h-4 w-4 text-blue-600" /> {{ t('facebook.publishFacebook') }}
+            </span>
+            <span class="block text-xs text-gray-400">{{ engagePage.page_name }}</span>
+          </span>
+        </label>
+
+        <label
+          class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+          :class="hasInstagram ? 'cursor-pointer' : 'opacity-60'"
+        >
+          <input
+            v-model="platformForm.publish_instagram"
+            type="checkbox"
+            class="mt-0.5 h-4 w-4"
+            :disabled="!hasInstagram"
+          />
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-white">
+              <Instagram class="h-4 w-4 text-pink-600" /> {{ t('facebook.publishInstagram') }}
+            </span>
+            <span v-if="hasInstagram" class="block text-xs text-gray-400">
+              @{{ engagePage.instagram_username }}
+            </span>
+            <span v-else class="block text-xs text-amber-600 dark:text-amber-400">
+              {{ t('facebook.instagramNotLinked') }}
+            </span>
+          </span>
+        </label>
+
+        <p class="rounded-lg bg-pink-50 p-2 text-xs text-pink-700 dark:bg-pink-950 dark:text-pink-300">
+          {{ t('facebook.instagramScopes') }}
+        </p>
+
+        <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button type="button" class="btn-primary" :disabled="savingPlatforms" @click="savePlatforms">
+            {{ savingPlatforms ? t('common.loading') : t('common.save') }}
+          </button>
+        </div>
       </div>
 
       <!-- Auto-engagement settings (inline, no popup) -->

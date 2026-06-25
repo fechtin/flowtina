@@ -55,3 +55,37 @@ Webhook only enqueues; a scheduler job processes with debounce+coalesce+dedup+re
 - Tests: 8 messenger + full suite 63 pass; ruff clean; migration d7a8b9c0e1f2 applies.
 - Real-world blocker is config not code: App Review for pages_messaging + Live mode +
   page subscribed_apps -> docs/messenger-setup.md.
+
+---
+
+## Cross-post Facebook + Instagram (1 Page -> nhiều nền tảng)
+
+Mở rộng FacebookPage (IG gắn liền 1 FB Page, dùng chung page token).
+
+### Backend — DONE ✅
+- [x] Model: FacebookPage += instagram_user_id/username, publish_facebook(def true), publish_instagram(def false); FacebookPost += platform
+- [x] Alembic migration e9b0c1d2f3a4 (down=d7a8b9c0e1f2), up/down/up clean
+- [x] facebook_service: dò instagram_business_account khi import/connect
+- [x] facebook_service: publish() fan-out FB + IG, skip nền tảng đã đăng thành công
+- [x] facebook_service: _publish_instagram() 2 bước /media -> /media_publish (ảnh public URL bắt buộc)
+- [x] Public media route GET /api/v1/public/posts/{id}/image cho Meta fetch ảnh upload
+- [x] Schema FacebookPageOut += IG fields; PATCH /facebook/pages/{id}/platforms
+- [x] 2 test mới (cross-post + toggle reject); full suite pass, ruff + mypy sạch
+
+### Frontend — DONE ✅
+- [x] types + facebookService.updatePlatforms + FacebookPlatformUpdate
+- [x] FacebookPage.vue: card "Nền tảng đăng bài" + toggle FB/IG, trạng thái IG đã liên kết
+- [x] i18n en + vi
+- [x] vue-tsc type-check sạch
+
+### Verify — DONE ✅
+- [x] ruff + mypy backend sạch (chỉ còn lỗi mypy pre-existing ở base.py/logger/ai_service)
+- [x] full backend suite pass (70 tests, +2 mới), migration up/down/up sạch
+- [x] frontend vue-tsc sạch
+
+### Còn lại (vận hành, không phải code)
+- [ ] Meta App Review: instagram_basic + instagram_content_publish (Live mode)
+- [ ] IG phải là Business/Creator account liên kết Page; token cần các scope trên
+- [ ] Cân nhắc docs/instagram-setup.md (như docs/messenger-setup.md)
+</new_string>
+</invoke>

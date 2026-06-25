@@ -193,6 +193,10 @@ export interface FacebookPage {
   page_name: string
   page_id: string
   access_token?: string
+  instagram_user_id?: string | null
+  instagram_username?: string | null
+  publish_facebook?: boolean
+  publish_instagram?: boolean
   auto_like_comments?: boolean
   auto_reply_comments?: boolean
   auto_reply_messages?: boolean
@@ -200,6 +204,11 @@ export interface FacebookPage {
   engage_interval_minutes?: number
   engage_max_actions?: number
   last_engaged_at?: string | null
+}
+
+export interface FacebookPlatformUpdate {
+  publish_facebook?: boolean
+  publish_instagram?: boolean
 }
 
 export interface FacebookDiscoveredPage {

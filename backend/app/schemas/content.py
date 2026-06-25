@@ -175,6 +175,10 @@ class FacebookPageOut(TimestampedSchema):
     page_id: str
     status: str
     enabled: bool
+    instagram_user_id: str | None = None
+    instagram_username: str | None = None
+    publish_facebook: bool = True
+    publish_instagram: bool = False
     auto_like_comments: bool = False
     auto_reply_comments: bool = False
     auto_reply_messages: bool = False
@@ -193,6 +197,13 @@ class FacebookEngagementUpdate(BaseModel):
     engage_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
     # Max comments acted on per page per cycle (like + reply safety cap).
     engage_max_actions: int | None = Field(default=None, ge=1, le=200)
+
+
+class FacebookPlatformUpdate(BaseModel):
+    """Toggle which platforms a Page cross-posts to (Facebook and/or Instagram)."""
+
+    publish_facebook: bool | None = None
+    publish_instagram: bool | None = None
 
 
 class FacebookCommentOut(TimestampedSchema):

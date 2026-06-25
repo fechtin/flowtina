@@ -21,6 +21,7 @@ from app.schemas.content import (
     FacebookImportRequest,
     FacebookPageCreate,
     FacebookPageOut,
+    FacebookPlatformUpdate,
     TelegramConfigIn,
     TelegramConfigOut,
     TelegramTestRequest,
@@ -84,6 +85,22 @@ async def import_pages(
 def delete_page(page_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     FacebookService(db).delete_page(page_id)
     return ok(message="Page disconnected")
+
+
+@router.patch("/facebook/pages/{page_id}/platforms")
+def update_platforms(
+    page_id: str,
+    payload: FacebookPlatformUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Enable/disable Facebook and Instagram cross-posting for a page."""
+    page = FacebookService(db).update_platforms(
+        page_id,
+        publish_facebook=payload.publish_facebook,
+        publish_instagram=payload.publish_instagram,
+    )
+    return ok(FacebookPageOut.model_validate(page).model_dump(), "Platforms updated")
 
 
 @router.patch("/facebook/pages/{page_id}/engagement")

@@ -20,6 +20,16 @@ class FacebookPage(Base, BaseModelMixin):
     access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="healthy", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Instagram Business/Creator account linked to this Page (Meta links one IG
+    # account per Page; both share this Page's access token). Discovered on
+    # import via the Graph API; null when the Page has no linked IG account.
+    instagram_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    instagram_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Cross-post targets: a single post publishes to every enabled platform on
+    # this Page. Facebook is on by default; Instagram is turned on automatically
+    # when a linked IG account is discovered (operator can toggle either off).
+    publish_facebook: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    publish_instagram: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Auto-engagement: when enabled, the scheduler polls recent posts and likes
     # and/or AI-replies to incoming comments. Requires the page token to carry
     # pages_read_engagement + pages_manage_engagement.
@@ -95,6 +105,9 @@ class FacebookPost(Base, BaseModelMixin):
 
     post_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
     page_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    # Which platform this publish targeted: "facebook" or "instagram". One post
+    # to one Page yields up to one history row per enabled platform.
+    platform: Mapped[str] = mapped_column(String(16), default="facebook", nullable=False)
     facebook_post_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

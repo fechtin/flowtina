@@ -9,6 +9,7 @@ import type {
   FacebookDiscoveredPage,
   FacebookComment,
   FacebookEngagementUpdate,
+  FacebookPlatformUpdate,
   Job,
   JobHistory,
   Keyword,
@@ -199,6 +200,8 @@ export const facebookService = {
     }),
   updateEngagement: (id: string, payload: FacebookEngagementUpdate) =>
     http.patch<unknown, FacebookPage>(`/facebook/pages/${id}/engagement`, payload),
+  updatePlatforms: (id: string, payload: FacebookPlatformUpdate) =>
+    http.patch<unknown, FacebookPage>(`/facebook/pages/${id}/platforms`, payload),
   listComments: (id: string, limit = 50) =>
     http.get<unknown, FacebookComment[]>(`/facebook/pages/${id}/comments?limit=${limit}`),
   engageNow: (id: string) =>

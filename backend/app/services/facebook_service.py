@@ -74,6 +74,7 @@ class FacebookService:
                 page_id=payload.page_id,
                 access_token_encrypted=encrypt_secret(payload.access_token),
             )
+        await self._link_instagram(page, payload.access_token)
         self.db.commit()
         self.db.refresh(page)
         await self._subscribe_webhook(page.page_id, payload.access_token)
@@ -85,6 +86,29 @@ class FacebookService:
             raise NotFoundException("Page not found")
         self.pages.soft_delete(page)
         self.db.commit()
+
+    def update_platforms(
+        self,
+        page_id: str,
+        *,
+        publish_facebook: bool | None = None,
+        publish_instagram: bool | None = None,
+    ) -> FacebookPage:
+        """Enable/disable Facebook and Instagram cross-posting for a page."""
+        page = self.pages.get(page_id)
+        if not page:
+            raise NotFoundException("Facebook page not found")
+        if publish_instagram and not page.instagram_user_id:
+            raise ValidationException(
+                "This page has no linked Instagram account to publish to"
+            )
+        if publish_facebook is not None:
+            page.publish_facebook = publish_facebook
+        if publish_instagram is not None:
+            page.publish_instagram = publish_instagram
+        self.db.commit()
+        self.db.refresh(page)
+        return page
 
     async def _resolve_token(self, project: Project | None, token: str | None) -> str:
         """Resolve and persist the working Graph token for a project.
@@ -190,6 +214,7 @@ class FacebookService:
                     page_id=page_id,
                     access_token_encrypted=encrypt_secret(page_token),
                 )
+            await self._link_instagram(page, page_token)
             result.append(page)
             subscribe_targets.append((page_id, page_token))
 
@@ -230,6 +255,40 @@ class FacebookService:
             log.info(f"Subscribed page {page_id} to Messenger webhook")
         except (FacebookException, httpx.HTTPError) as exc:
             log.warning(f"Webhook subscribe failed for page {page_id}: {exc}")
+
+    async def _link_instagram(self, page: FacebookPage, page_token: str) -> None:
+        """Discover and store the Instagram account linked to this Page.
+
+        A Page has at most one linked Instagram Business/Creator account, which
+        shares the Page's access token. Newly linking an account turns Instagram
+        cross-posting on by default (the operator can toggle it off); an existing
+        toggle is preserved on re-sync. Best-effort: a missing link or a token
+        without ``instagram_basic`` simply leaves the Page Facebook-only.
+        """
+        ig_id, ig_username = await self._fetch_instagram_account(page.page_id, page_token)
+        if ig_id and not page.instagram_user_id:
+            page.publish_instagram = True
+        page.instagram_user_id = ig_id
+        page.instagram_username = ig_username
+
+    async def _fetch_instagram_account(
+        self, page_id: str, page_token: str
+    ) -> tuple[str | None, str | None]:
+        """Return the (id, username) of the Page's linked IG account, or (None, None)."""
+        try:
+            data = await self._get(
+                f"{GRAPH_API}/{page_id}",
+                {
+                    "fields": "instagram_business_account{id,username}",
+                    "access_token": page_token,
+                },
+            )
+        except (FacebookException, httpx.HTTPError) as exc:
+            log.warning(f"Instagram lookup failed for page {page_id}: {exc}")
+            return None, None
+        ig = data.get("instagram_business_account") or {}
+        ig_id = str(ig["id"]) if ig.get("id") else None
+        return ig_id, ig.get("username")
 
     async def _maybe_exchange_long_lived(self, token: str) -> str:
         """Exchange a short-lived user token for a long-lived one when possible."""
@@ -277,7 +336,14 @@ class FacebookService:
         return resp.json()
 
     async def publish(self, post_id: str, page_id: str) -> dict:
-        """Publish a post to a connected page with retry + history tracking."""
+        """Publish a post to every platform enabled on a connected page.
+
+        Fans out to Facebook and/or Instagram per the page's publish toggles,
+        recording one history row per platform. A platform that already has a
+        successful publish for this post is skipped, so a retry of a partial
+        failure never double-posts to a platform that already succeeded. The
+        post is marked ``published`` when at least one platform succeeds.
+        """
         post = self.posts.get(post_id)
         if not post:
             raise NotFoundException("Post not found")
@@ -287,45 +353,146 @@ class FacebookService:
 
         message = self._compose_message(post)
         token = decrypt_secret(page.access_token_encrypted)
-        call = self._build_publish_call(post, page.page_id, message, token)
 
+        targets: list[str] = []
+        if page.publish_facebook:
+            targets.append("facebook")
+        if page.publish_instagram and page.instagram_user_id:
+            targets.append("instagram")
+        if not targets:
+            raise ValidationException("No publish platform is enabled for this page")
+
+        results: dict[str, dict] = {}
+        errors: list[str] = []
+        any_ok = False
+        for platform in targets:
+            if self._already_published(post.id, page.id, platform):
+                results[platform] = {"skipped": "already published"}
+                any_ok = True
+                continue
+            try:
+                results[platform] = await self._publish_one(
+                    platform, post, page, message, token
+                )
+                any_ok = True
+            except Exception as exc:  # noqa: BLE001 - record per-platform failure
+                errors.append(f"{platform}: {exc}")
+                results[platform] = {"error": str(exc)[:500]}
+
+        if any_ok:
+            post.status = "published"
+            post.published_at = datetime.now(timezone.utc)
+            post.error_message = "; ".join(errors)[:1000] if errors else None
+            # Drop the uploaded binary only when every target succeeded; a
+            # partial failure keeps it so the failed platform can be retried.
+            if post.image_path and not errors:
+                remove_upload(post.image_path)
+                post.image_path = None
+        else:
+            post.status = "failed"
+            post.error_message = "; ".join(errors)[:1000]
+        self.db.commit()
+
+        if not any_ok:
+            raise FacebookException(f"Publish failed: {'; '.join(errors)}")
+        return {
+            "results": results,
+            "platforms": targets,
+            # Back-compat: the Facebook story id stays at the top level for
+            # existing callers; the Instagram media id sits alongside it.
+            "facebook_post_id": results.get("facebook", {}).get("id"),
+            "instagram_post_id": results.get("instagram", {}).get("id"),
+        }
+
+    def _already_published(self, post_id: str, page_id: str, platform: str) -> bool:
+        rows = self.fb_posts.list(
+            post_id=post_id, page_id=page_id, platform=platform, status="published", limit=1
+        )
+        return bool(rows)
+
+    async def _publish_one(
+        self, platform: str, post: Post, page: FacebookPage, message: str, token: str
+    ) -> dict:
+        """Publish to a single platform, recording one history row for it."""
         history = self.fb_posts.create(
-            post_id=post.id, page_id=page.id, status="publishing"
+            post_id=post.id, page_id=page.id, platform=platform, status="publishing"
         )
         start = time.perf_counter()
+        fb_post_id: str | None
         try:
-            data = await retry_async(
-                call,
-                attempts=3,
-                on_error=lambda attempt, exc: log.warning(
-                    f"FB publish attempt {attempt + 1}: {exc}"
-                ),
-            )
+            if platform == "instagram":
+                fb_post_id = await self._publish_instagram(
+                    post, page.instagram_user_id or "", message, token
+                )
+                data: dict = {"id": fb_post_id}
+            else:
+                call = self._build_publish_call(post, page.page_id, message, token)
+                data = await retry_async(
+                    call,
+                    attempts=3,
+                    on_error=lambda attempt, exc: log.warning(
+                        f"FB publish attempt {attempt + 1}: {exc}"
+                    ),
+                )
+                # A /photos response carries the photo id plus the feed story id
+                # in ``post_id``; prefer the story id so links resolve to the post.
+                fb_post_id = data.get("post_id") or data.get("id")
             duration = int((time.perf_counter() - start) * 1000)
-            # A /photos response carries the photo id plus the feed story id in
-            # ``post_id``; prefer the story id so links resolve to the post.
-            fb_post_id = data.get("post_id") or data.get("id")
             history.status = "published"
             history.facebook_post_id = fb_post_id
             history.duration_ms = duration
             history.response_json = json.dumps(data)[:2000]
             history.published_at = datetime.now(timezone.utc)
-            post.status = "published"
-            post.published_at = datetime.now(timezone.utc)
-            # The uploaded binary is only needed until publish succeeds.
-            if post.image_path:
-                remove_upload(post.image_path)
-                post.image_path = None
-            self.db.commit()
-            log.info(f"Published post {post.id} to page {page.page_id} as {fb_post_id}")
-            return {"facebook_post_id": fb_post_id, "duration_ms": duration}
-        except Exception as exc:  # noqa: BLE001 - record failure, notify upstream
+            self.db.flush()
+            log.info(f"Published post {post.id} to {platform} as {fb_post_id}")
+            return {"id": fb_post_id, "duration_ms": duration}
+        except Exception as exc:  # noqa: BLE001 - record failure, re-raise to caller
             history.status = "failed"
             history.error_message = str(exc)[:1000]
-            post.status = "failed"
-            post.error_message = str(exc)[:1000]
-            self.db.commit()
-            raise FacebookException(f"Publish failed: {exc}") from exc
+            self.db.flush()
+            raise
+
+    async def _publish_instagram(
+        self, post: Post, ig_user_id: str, caption: str, token: str
+    ) -> str:
+        """Publish an image post to Instagram via the two-step Graph API flow.
+
+        Instagram allows neither text-only posts nor binary upload: it requires a
+        publicly reachable image URL. A post's ``image_url`` is used directly; a
+        locally uploaded image is exposed through the public media route, which
+        needs ``public_base_url`` configured.
+        """
+        image_url = self._instagram_image_url(post)
+        container = await self._call_graph(
+            f"{GRAPH_API}/{ig_user_id}/media",
+            {"image_url": image_url, "caption": caption, "access_token": token},
+        )
+        creation_id = container.get("id")
+        if not creation_id:
+            raise FacebookException("Instagram media container was not created")
+        published = await self._call_graph(
+            f"{GRAPH_API}/{ig_user_id}/media_publish",
+            {"creation_id": creation_id, "access_token": token},
+        )
+        media_id = published.get("id")
+        if not media_id:
+            raise FacebookException("Instagram media_publish returned no id")
+        return str(media_id)
+
+    @staticmethod
+    def _instagram_image_url(post: Post) -> str:
+        """Resolve a public image URL for Instagram, or fail with a clear reason."""
+        if post.image_url:
+            return post.image_url
+        if post.image_path:
+            base = settings.public_base_url.rstrip("/")
+            if not base:
+                raise ValidationException(
+                    "Instagram needs a public image URL; set PUBLIC_BASE_URL "
+                    "or attach the image via a public image_url"
+                )
+            return f"{base}/api/v1/public/posts/{post.id}/image"
+        raise ValidationException("Instagram posts require an image")
 
     @staticmethod
     def _compose_message(post: Post) -> str:

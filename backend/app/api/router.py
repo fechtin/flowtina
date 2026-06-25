@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api import auth, dashboard, integrations, jobs, posts, projects, prompts, sources
+from app.api import (
+    auth,
+    dashboard,
+    integrations,
+    jobs,
+    posts,
+    projects,
+    prompts,
+    public,
+    sources,
+)
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
@@ -15,3 +25,4 @@ api_router.include_router(posts.router)
 api_router.include_router(jobs.router)
 api_router.include_router(integrations.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(public.router)

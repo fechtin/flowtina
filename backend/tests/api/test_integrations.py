@@ -120,6 +120,75 @@ def test_facebook_connect_and_publish(client, auth_headers, project, monkeypatch
     assert pub.json()["data"]["facebook_post_id"] == "fb_post_123"
 
 
+def test_facebook_instagram_crosspost(client, auth_headers, project, monkeypatch):
+    """Connecting a Page links its IG account and a publish fans out to both."""
+    calls: list[str] = []
+
+    async def fake_get(url, params):
+        # The Page lookup that discovers the linked Instagram account.
+        return {"instagram_business_account": {"id": "ig_1", "username": "myinsta"}}
+
+    async def fake_graph(url, data):
+        calls.append(url)
+        if url.endswith("/media_publish"):
+            return {"id": "ig_media_999"}
+        if url.endswith("/media"):
+            return {"id": "ig_container_1"}
+        return {"id": "fb_post_123"}
+
+    monkeypatch.setattr("app.services.facebook_service.FacebookService._get", staticmethod(fake_get))
+    monkeypatch.setattr("app.services.facebook_service.FacebookService._call_graph", staticmethod(fake_graph))
+
+    page = client.post(
+        f"/api/v1/projects/{project}/facebook/pages",
+        json={"page_name": "My Page", "page_id": "111", "access_token": "tok"},
+        headers=auth_headers,
+    ).json()["data"]
+    # IG was discovered and cross-posting turned on automatically.
+    assert page["instagram_username"] == "myinsta"
+    assert page["publish_instagram"] is True
+    assert page["publish_facebook"] is True
+
+    # Instagram requires an image, so attach a public image URL.
+    post = client.post(
+        f"/api/v1/projects/{project}/posts",
+        json={
+            "content": "Hello both platforms from the Flowtina test suite.",
+            "image_url": "https://example.com/pic.jpg",
+        },
+        headers=auth_headers,
+    ).json()["data"]
+
+    pub = client.post(
+        f"/api/v1/posts/{post['id']}/publish?page_id={page['id']}", headers=auth_headers
+    )
+    assert pub.status_code == 200
+    data = pub.json()["data"]
+    assert data["facebook_post_id"] == "fb_post_123"
+    assert data["instagram_post_id"] == "ig_media_999"
+    assert set(data["platforms"]) == {"facebook", "instagram"}
+    # Instagram's two-step flow ran: container creation then publish.
+    assert any(u.endswith("/media") for u in calls)
+    assert any(u.endswith("/media_publish") for u in calls)
+
+
+def test_facebook_platform_toggle_requires_linked_instagram(client, auth_headers, project):
+    """Enabling Instagram on a Page with no linked IG account is rejected."""
+    page = client.post(
+        f"/api/v1/projects/{project}/facebook/pages",
+        json={"page_name": "No IG", "page_id": "222", "access_token": "tok"},
+        headers=auth_headers,
+    ).json()["data"]
+    assert page["publish_instagram"] is False
+
+    resp = client.patch(
+        f"/api/v1/facebook/pages/{page['id']}/platforms",
+        json={"publish_instagram": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+
 def test_facebook_connect_page_upserts_token(client, auth_headers, project):
     body = {"page_name": "My Page", "page_id": "777", "access_token": "tok1"}
     first = client.post(
