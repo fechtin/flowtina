@@ -136,6 +136,17 @@ class Settings(BaseSettings):
     # Archive lowest-scoring memories once a user exceeds this count.
     memory_archive_cap: int = 10000
 
+    # --- AI model fallback (global default provider) ---
+    # Ordered groq models tried for the global default provider: the owner's
+    # default_model is used first, then these in order. groq enforces rate limits
+    # (TPM) per model, so when one is busy (HTTP 429/503) failing over to the next
+    # model yields a fresh budget. Only applied when default_provider is "groq".
+    groq_fallback_models: str = (
+        "qwen/qwen3-32b,qwen/qwen3.6-27b,openai/gpt-oss-120b,"
+        "openai/gpt-oss-20b,meta-llama/llama-4-scout-17b-16e-instruct,"
+        "llama-3.3-70b-versatile"
+    )
+
     # --- Rate limiting (requests / minute) ---
     rate_limit_anonymous: int = 30
     rate_limit_authenticated: int = 300

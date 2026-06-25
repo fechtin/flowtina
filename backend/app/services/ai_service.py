@@ -53,29 +53,47 @@ class AIService:
             grounding=provider.grounding_enabled,
         )
 
-    def _global_fallback_config(self, project_id: str) -> ProviderConfig | None:
-        """Build a provider config from the project owner's global default settings.
+    def _global_fallback_configs(self, project_id: str) -> list[ProviderConfig]:
+        """Build prioritized provider configs from the owner's global default settings.
 
         Used when a project has no AI provider of its own. The API key comes from the
         saved global key, falling back to the env-configured key for that provider.
+
+        For groq, the owner's ``default_model`` is tried first, then the configured
+        fallback models in order: groq enforces rate limits (TPM) per model, so a
+        busy/rate-limited model (HTTP 429/503) fails over to the next with a fresh
+        budget. Other providers yield a single config with the default model.
         """
         project = ProjectRepository(self.db).get(project_id)
         if not project:
-            return None
+            return []
         prefs = UserSettingsRepository(self.db).get_by(user_id=project.user_id)
         if not prefs or not prefs.default_provider:
-            return None
+            return []
         api_key = (
             decrypt_secret(prefs.default_api_key_encrypted or "")
             or settings.provider_api_key(prefs.default_provider)
             or None
         )
-        return ProviderConfig(
-            provider=prefs.default_provider,
-            model=prefs.default_model or "",
-            api_key=api_key,
-            base_url=prefs.default_base_url,
-        )
+        models: list[str] = []
+        if prefs.default_model:
+            models.append(prefs.default_model)
+        if prefs.default_provider == "groq":
+            for model in settings.groq_fallback_models.split(","):
+                model = model.strip()
+                if model and model not in models:
+                    models.append(model)
+        if not models:
+            models = [""]
+        return [
+            ProviderConfig(
+                provider=prefs.default_provider,
+                model=model,
+                api_key=api_key,
+                base_url=prefs.default_base_url,
+            )
+            for model in models
+        ]
 
     async def generate(self, project_id: str, prompt: str) -> GenerationResult:
         """Generate text, trying each enabled provider (by priority) in turn.
@@ -84,11 +102,13 @@ class AIService:
         """
         configs = [self._to_config(p) for p in self.providers.list_enabled(project_id)]
         if not configs:
-            fallback = self._global_fallback_config(project_id)
-            if fallback is None:
+            configs = self._global_fallback_configs(project_id)
+            if not configs:
                 raise ProviderException("No enabled AI provider configured for this project")
-            configs = [fallback]
 
+        # With a multi-model fallback chain, fail over fast (one shot per model)
+        # rather than retrying a busy model; a single config keeps full retries.
+        attempts = 1 if len(configs) > 1 else 3
         last_error: Exception | None = None
         for config in configs:
             client = AIProviderFactory.create(config)
@@ -96,9 +116,9 @@ class AIService:
             try:
                 result = await retry_async(
                     lambda c=client: c.generate(prompt),
-                    attempts=3,
-                    on_error=lambda attempt, exc: log.warning(
-                        f"{config.provider} attempt {attempt + 1} failed: {exc}"
+                    attempts=attempts,
+                    on_error=lambda attempt, exc, cfg=config: log.warning(
+                        f"{cfg.provider}/{cfg.model} attempt {attempt + 1} failed: {exc}"
                     ),
                 )
                 duration_ms = int((time.perf_counter() - start) * 1000)
@@ -108,7 +128,7 @@ class AIService:
                 return result
             except Exception as exc:  # noqa: BLE001 - try next provider
                 last_error = exc
-                log.error(f"Provider {config.provider} exhausted retries: {exc}")
+                log.warning(f"{config.provider}/{config.model} failed, trying next: {exc}")
                 continue
 
         raise ProviderException(f"All providers failed. Last error: {last_error}")
