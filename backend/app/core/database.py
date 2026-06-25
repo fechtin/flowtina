@@ -46,6 +46,10 @@ def _set_sqlite_pragma(dbapi_connection, _connection_record) -> None:  # noqa: A
     cursor.execute("PRAGMA cache_size=-10000")
     cursor.execute("PRAGMA temp_store=MEMORY")
     cursor.execute("PRAGMA foreign_keys=ON")
+    # The API and scheduler run as separate processes writing the same file;
+    # WAL allows one writer at a time, so make a blocked writer wait (and retry)
+    # up to 5s instead of failing immediately with "database is locked".
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 

@@ -37,6 +37,10 @@ log = get_logger("facebook")
 
 GRAPH_API = "https://graph.facebook.com/v21.0"
 
+# Webhook fields a connected page must subscribe to for Messenger DM delivery.
+# Without this subscription Meta never delivers the page's messages to the app.
+WEBHOOK_FIELDS = "messages,messaging_postbacks,message_deliveries,messaging_optins"
+
 
 class FacebookService:
     def __init__(self, db: Session) -> None:
@@ -48,13 +52,14 @@ class FacebookService:
     def list_pages(self, project_id: str) -> list[FacebookPage]:
         return self.pages.list(project_id=project_id)
 
-    def connect_page(
+    async def connect_page(
         self, project_id: str, payload: FacebookPageCreate
     ) -> FacebookPage:
         """Connect a page, or refresh its token if already connected.
 
         Upsert by (project_id, page_id) so re-entering the form with a new token
-        updates the existing page in place instead of creating a duplicate.
+        updates the existing page in place instead of creating a duplicate. The
+        page is subscribed to this app's webhook so Messenger DMs are delivered.
         """
         existing = self.pages.get_by(project_id=project_id, page_id=payload.page_id)
         if existing:
@@ -71,6 +76,7 @@ class FacebookService:
             )
         self.db.commit()
         self.db.refresh(page)
+        await self._subscribe_webhook(page.page_id, payload.access_token)
         return page
 
     def delete_page(self, page_id: str) -> None:
@@ -162,6 +168,7 @@ class FacebookService:
         existing = {p.page_id: p for p in self.pages.list(project_id=project_id)}
         result: list[FacebookPage] = []
         seen: set[str] = set()
+        subscribe_targets: list[tuple[str, str]] = []
         for acc in accounts:
             page_id = str(acc.get("id", ""))
             page_token = acc.get("access_token", "")
@@ -184,6 +191,7 @@ class FacebookService:
                     access_token_encrypted=encrypt_secret(page_token),
                 )
             result.append(page)
+            subscribe_targets.append((page_id, page_token))
 
         # Full sync only: prune pages no longer returned by the token
         # (unassigned/removed on Facebook). Skipped when importing a selection.
@@ -195,11 +203,33 @@ class FacebookService:
                     removed += 1
 
         self.db.commit()
+        # Subscribe each connected page to the app webhook so Messenger DMs are
+        # delivered. Best-effort and after commit: a subscribe failure never
+        # undoes a successful import.
+        for page_id, page_token in subscribe_targets:
+            await self._subscribe_webhook(page_id, page_token)
         log.info(
             f"Imported {len(result)} Facebook page(s) for project {project_id}"
             + (f", pruned {removed} stale page(s)" if removed else "")
         )
         return result
+
+    async def _subscribe_webhook(self, page_id: str, page_token: str) -> None:
+        """Subscribe a page to this app's webhook for Messenger DM delivery.
+
+        Best-effort: a failure here (e.g. the token lacks ``pages_messaging``)
+        must not block connecting the page, so it is logged, not raised.
+        """
+        if not page_token:
+            return
+        try:
+            await self._call_graph(
+                f"{GRAPH_API}/{page_id}/subscribed_apps",
+                {"subscribed_fields": WEBHOOK_FIELDS, "access_token": page_token},
+            )
+            log.info(f"Subscribed page {page_id} to Messenger webhook")
+        except (FacebookException, httpx.HTTPError) as exc:
+            log.warning(f"Webhook subscribe failed for page {page_id}: {exc}")
 
     async def _maybe_exchange_long_lived(self, token: str) -> str:
         """Exchange a short-lived user token for a long-lived one when possible."""

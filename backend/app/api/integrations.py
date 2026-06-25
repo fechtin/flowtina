@@ -43,12 +43,12 @@ def list_pages(project: Project = Depends(get_owned_project), db: Session = Depe
 
 
 @router.post("/projects/{project_id}/facebook/pages")
-def connect_page(
+async def connect_page(
     payload: FacebookPageCreate,
     project: Project = Depends(get_owned_project),
     db: Session = Depends(get_db),
 ):
-    page = FacebookService(db).connect_page(project.id, payload)
+    page = await FacebookService(db).connect_page(project.id, payload)
     return ok(FacebookPageOut.model_validate(page).model_dump(), "Page connected")
 
 
