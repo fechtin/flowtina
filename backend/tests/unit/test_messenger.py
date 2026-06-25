@@ -151,6 +151,33 @@ def test_debounce_holds_unsettled_messages(db_session, monkeypatch):
     assert MessengerEventRepository(db_session).count(status="pending") == 1
 
 
+def test_first_contact_uses_plain_prompt_then_memory(db_session, monkeypatch):
+    """First DM must not feign prior familiarity; later DMs use memory context."""
+    monkeypatch.setattr(settings, "messenger_debounce_seconds", 0)
+    _make_page(db_session)
+    service = MessengerService(db_session)
+    _wire(service)
+
+    prompts: list[str] = []
+    fixed = service.ai
+
+    class _Recording:
+        async def generate(self, project_id: str, prompt: str):
+            prompts.append(prompt)
+            return await fixed.generate(project_id, prompt)
+
+    service.ai = _Recording()
+    marker = "talked with before"  # only present in the memory-aware prompt
+
+    service.enqueue_event(_payload(text="Hi", mid="a"))
+    asyncio.run(service.process_inbox())
+    assert prompts and marker not in prompts[-1]  # first contact -> plain prompt
+
+    service.enqueue_event(_payload(text="Tell me more", mid="b"))
+    asyncio.run(service.process_inbox())
+    assert marker in prompts[-1]  # now remembered -> memory-aware prompt
+
+
 def test_rapid_messages_coalesce_into_one_reply(db_session, monkeypatch):
     monkeypatch.setattr(settings, "messenger_debounce_seconds", 0)
     _make_page(db_session)

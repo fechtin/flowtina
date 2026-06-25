@@ -257,6 +257,20 @@ class FacebookEngagementService:
             external_user_id=fb_user_id,
             user_name=author.get("name"),
         )
+        # First contact: use the plain prompt so the reply does not feign prior
+        # familiarity. The exchange is still recorded so memory builds over time.
+        if not self.memory.has_context(conversation):
+            prompt = prompt_engine.render(
+                DEFAULT_REPLY_PROMPT,
+                {
+                    "persona": persona,
+                    "post_content": post_message[:1500],
+                    "comment": comment[:1000],
+                },
+            )
+            result = await self.ai.generate(page.project_id, prompt)
+            return strip_markdown(result.text).strip()[:8000], conversation
+
         context = await self.memory.build_context(conversation, comment)
         prompt = prompt_engine.render(
             DEFAULT_REPLY_WITH_MEMORY_PROMPT,

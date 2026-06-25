@@ -221,6 +221,16 @@ class MessengerService:
             channel=CHANNEL_MESSENGER,
             external_user_id=sender_id,
         )
+        # First contact: use the plain prompt so the reply does not pretend to
+        # remember a follower we have never talked to. The exchange is still
+        # recorded (conversation returned) so memory builds up for next time.
+        if not self.memory.has_context(conversation):
+            prompt = prompt_engine.render(
+                DEFAULT_DM_REPLY_PROMPT, {"persona": persona, "comment": text[:1500]}
+            )
+            result = await self.ai.generate(page.project_id, prompt)
+            return self._clean(result.text), conversation
+
         context = await self.memory.build_context(conversation, text)
         prompt = prompt_engine.render(
             DEFAULT_DM_REPLY_WITH_MEMORY_PROMPT,
