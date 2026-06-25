@@ -7,9 +7,11 @@ Two storage tiers (see Long-Term Memory Architecture):
 * ``memories`` — distilled, scored, deduped facts (Tier 2): the real long-term
   recall, retrieved with a small prompt footprint across sessions.
 
-A ``Conversation`` is channel-agnostic: it keys a single end user on a page by
-``(page_id, channel, external_user_id)`` so the same person is remembered whether
-they reach the page through public comments or Messenger.
+A ``Conversation`` keys one end user on a page *per channel* by
+``(page_id, channel, external_user_id)``. Comment and Messenger histories stay
+separate: Meta hides the comment author's id (``from`` is null for ordinary
+users), so only Messenger yields a stable per-user id (PSID). There is no shared
+id to merge the two channels, so per-user memory is effectively Messenger-only.
 """
 
 from __future__ import annotations
@@ -33,7 +35,8 @@ class Conversation(Base, BaseModelMixin):
     """One end user talking to one page through one channel.
 
     Acts as the per-user memory scope: every transcript message and memory row
-    references its ``conversation_id``.
+    references its ``conversation_id``. In practice this is populated for
+    Messenger (PSID), since Meta returns no author id for comment authors.
     """
 
     __tablename__ = "conversations"
