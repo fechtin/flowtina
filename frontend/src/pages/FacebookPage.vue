@@ -140,6 +140,7 @@ const engagePage = ref<FacebookPage | null>(null)
 const engageForm = reactive({
   auto_like_comments: false,
   auto_reply_comments: false,
+  auto_reply_messages: false,
   reply_persona: '',
   engage_interval_minutes: 30,
   engage_max_actions: 25,
@@ -152,6 +153,7 @@ async function openEngage(page: FacebookPage) {
   engagePage.value = page
   engageForm.auto_like_comments = !!page.auto_like_comments
   engageForm.auto_reply_comments = !!page.auto_reply_comments
+  engageForm.auto_reply_messages = !!page.auto_reply_messages
   engageForm.reply_persona = page.reply_persona ?? ''
   engageForm.engage_interval_minutes = page.engage_interval_minutes ?? 30
   engageForm.engage_max_actions = page.engage_max_actions ?? 25
@@ -420,7 +422,15 @@ async function doDelete() {
           </span>
         </label>
 
-        <div v-if="engageForm.auto_reply_comments">
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <input v-model="engageForm.auto_reply_messages" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoReplyMessages') }}</span>
+            <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyMessagesHint') }}</span>
+          </span>
+        </label>
+
+        <div v-if="engageForm.auto_reply_comments || engageForm.auto_reply_messages">
           <label class="label">{{ t('facebook.replyPersona') }}</label>
           <textarea
             v-model="engageForm.reply_persona"
@@ -429,6 +439,13 @@ async function doDelete() {
             :placeholder="t('facebook.replyPersonaPlaceholder')"
           />
         </div>
+
+        <p
+          v-if="engageForm.auto_reply_messages"
+          class="rounded-lg bg-blue-50 p-2 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+        >
+          {{ t('facebook.autoReplyMessagesScopes') }}
+        </p>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
