@@ -151,4 +151,4 @@ Flowtina as a network service, you must make the complete corresponding source
 code available to its users. You are free to use, study, modify, and
 redistribute the software under the same license.
 
-Copyright © 2026 Flowtina contributors.
+Copyright © 2026 FechTin (https://fechtin.com)
