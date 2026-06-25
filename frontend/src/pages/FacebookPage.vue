@@ -134,9 +134,8 @@ async function doImport(pageIds: string[]) {
   }
 }
 
-// --- Comment auto-engagement ---
-const showEngage = ref(false)
-const engagePage = ref<FacebookPage | null>(null)
+// --- Comment auto-engagement (one page per project, settings shown inline) ---
+const engagePage = computed<FacebookPage | null>(() => pages.value[0] ?? null)
 const engageForm = reactive({
   auto_like_comments: false,
   auto_reply_comments: false,
@@ -149,18 +148,24 @@ const comments = ref<FacebookComment[]>([])
 const { loading: savingEngage, run: runEngage } = useAsync()
 const { loading: engagingNow, run: runEngageNow } = useAsync()
 
-async function openEngage(page: FacebookPage) {
-  engagePage.value = page
-  engageForm.auto_like_comments = !!page.auto_like_comments
-  engageForm.auto_reply_comments = !!page.auto_reply_comments
-  engageForm.auto_reply_messages = !!page.auto_reply_messages
-  engageForm.reply_persona = page.reply_persona ?? ''
-  engageForm.engage_interval_minutes = page.engage_interval_minutes ?? 30
-  engageForm.engage_max_actions = page.engage_max_actions ?? 25
-  comments.value = []
-  showEngage.value = true
-  await loadComments(page.id)
-}
+// Keep the inline form in sync with the project's page as it loads/reloads.
+watch(
+  engagePage,
+  (page) => {
+    if (!page) {
+      comments.value = []
+      return
+    }
+    engageForm.auto_like_comments = !!page.auto_like_comments
+    engageForm.auto_reply_comments = !!page.auto_reply_comments
+    engageForm.auto_reply_messages = !!page.auto_reply_messages
+    engageForm.reply_persona = page.reply_persona ?? ''
+    engageForm.engage_interval_minutes = page.engage_interval_minutes ?? 30
+    engageForm.engage_max_actions = page.engage_max_actions ?? 25
+    void loadComments(page.id)
+  },
+  { immediate: true },
+)
 
 async function loadComments(id: string) {
   try {
@@ -176,10 +181,7 @@ async function saveEngage() {
     () => facebookService.updateEngagement(engagePage.value!.id, { ...engageForm }),
     { successMessage: t('facebook.engagementSaved') },
   )
-  if (updated !== undefined) {
-    showEngage.value = false
-    await load()
-  }
+  if (updated !== undefined) await load()
 }
 
 async function engageNow() {
@@ -232,40 +234,136 @@ async function doDelete() {
       <button class="btn-primary" @click="openImport">{{ t('facebook.importPages') }}</button>
     </EmptyState>
 
-    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <div v-for="p in pages" :key="p.id" class="card flex flex-col p-5">
-        <div class="flex items-start justify-between">
-          <div class="flex min-w-0 items-center gap-3">
-            <div class="rounded-lg bg-blue-50 p-2 text-blue-600 dark:bg-blue-950 dark:text-blue-300">
-              <Facebook class="h-5 w-5" />
-            </div>
-            <div class="min-w-0">
-              <h3 class="truncate font-semibold text-gray-900 dark:text-white">{{ p.page_name }}</h3>
-              <p class="truncate text-xs text-gray-400">{{ p.page_id }}</p>
-            </div>
+    <div v-else-if="engagePage" class="mx-auto max-w-2xl space-y-6">
+      <!-- One page per project -->
+      <div class="card flex items-start justify-between p-5">
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="rounded-lg bg-blue-50 p-2 text-blue-600 dark:bg-blue-950 dark:text-blue-300">
+            <Facebook class="h-5 w-5" />
           </div>
-          <button class="btn-ghost text-red-600" @click="confirmDelete(p.id)">
-            <Trash2 class="h-4 w-4" />
-          </button>
+          <div class="min-w-0">
+            <h3 class="truncate font-semibold text-gray-900 dark:text-white">{{ engagePage.page_name }}</h3>
+            <p class="truncate text-xs text-gray-400">{{ engagePage.page_id }}</p>
+          </div>
+        </div>
+        <button class="btn-ghost text-red-600" @click="confirmDelete(engagePage.id)">
+          <Trash2 class="h-4 w-4" />
+        </button>
+      </div>
+
+      <!-- Auto-engagement settings (inline, no popup) -->
+      <div class="card space-y-4 p-5">
+        <div>
+          <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('facebook.engagementTitle') }}</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('facebook.engagementHint') }}</p>
         </div>
 
-        <div class="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800">
-          <div class="flex flex-wrap gap-1.5">
-            <span
-              v-if="p.auto_like_comments"
-              class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600 dark:bg-blue-950 dark:text-blue-300"
-            >
-              <ThumbsUp class="h-3 w-3" /> {{ t('facebook.autoLike') }}
-            </span>
-            <span
-              v-if="p.auto_reply_comments"
-              class="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-600 dark:bg-green-950 dark:text-green-300"
-            >
-              <MessageCircle class="h-3 w-3" /> {{ t('facebook.autoReply') }}
-            </span>
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <input v-model="engageForm.auto_like_comments" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoLike') }}</span>
+            <span class="block text-xs text-gray-400">{{ t('facebook.autoLikeHint') }}</span>
+          </span>
+        </label>
+
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <input v-model="engageForm.auto_reply_comments" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoReply') }}</span>
+            <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyHint') }}</span>
+          </span>
+        </label>
+
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+          <input v-model="engageForm.auto_reply_messages" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoReplyMessages') }}</span>
+            <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyMessagesHint') }}</span>
+          </span>
+        </label>
+
+        <div v-if="engageForm.auto_reply_comments || engageForm.auto_reply_messages">
+          <label class="label">{{ t('facebook.replyPersona') }}</label>
+          <textarea
+            v-model="engageForm.reply_persona"
+            rows="3"
+            class="input text-sm"
+            :placeholder="t('facebook.replyPersonaPlaceholder')"
+          />
+        </div>
+
+        <p
+          v-if="engageForm.auto_reply_messages"
+          class="rounded-lg bg-blue-50 p-2 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+        >
+          {{ t('facebook.autoReplyMessagesScopes') }}
+        </p>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">{{ t('facebook.engageInterval') }}</label>
+            <input
+              v-model.number="engageForm.engage_interval_minutes"
+              type="number"
+              min="5"
+              max="1440"
+              class="input text-sm"
+            />
+            <span class="mt-1 block text-xs text-gray-400">{{ t('facebook.engageIntervalHint') }}</span>
           </div>
-          <button class="btn-secondary text-xs" @click="openEngage(p)">
-            <MessageCircle class="h-3.5 w-3.5" /> {{ t('facebook.engagement') }}
+          <div>
+            <label class="label">{{ t('facebook.engageMaxActions') }}</label>
+            <input
+              v-model.number="engageForm.engage_max_actions"
+              type="number"
+              min="1"
+              max="200"
+              class="input text-sm"
+            />
+            <span class="mt-1 block text-xs text-gray-400">{{ t('facebook.engageMaxActionsHint') }}</span>
+          </div>
+        </div>
+
+        <p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+          {{ t('facebook.engagementScopes') }}
+        </p>
+
+        <!-- Recent processed comments -->
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('facebook.recentComments') }}</span>
+            <button class="btn-ghost text-xs" :disabled="engagingNow" @click="engageNow">
+              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': engagingNow }" />
+              {{ t('facebook.engageNow') }}
+            </button>
+          </div>
+          <p v-if="!comments.length" class="text-xs text-gray-400">{{ t('facebook.noComments') }}</p>
+          <div v-else class="max-h-56 space-y-2 overflow-y-auto">
+            <div
+              v-for="c in comments"
+              :key="c.id"
+              class="rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="truncate font-medium text-gray-900 dark:text-white">{{ c.commenter_name || '—' }}</span>
+                <span class="flex shrink-0 gap-1.5">
+                  <span v-if="c.liked" class="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-300">
+                    <ThumbsUp class="h-3 w-3" /> {{ t('facebook.liked') }}
+                  </span>
+                  <span v-if="c.replied" class="inline-flex items-center gap-0.5 text-green-600 dark:text-green-300">
+                    <MessageCircle class="h-3 w-3" /> {{ t('facebook.replied') }}
+                  </span>
+                </span>
+              </div>
+              <p class="mt-0.5 truncate text-gray-500 dark:text-gray-400">{{ c.message || '—' }}</p>
+              <p v-if="c.reply_text" class="mt-1 truncate italic text-gray-400">↳ {{ c.reply_text }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button type="button" class="btn-primary" :disabled="savingEngage" @click="saveEngage">
+            {{ savingEngage ? t('common.loading') : t('common.save') }}
           </button>
         </div>
       </div>
@@ -396,123 +494,6 @@ async function doDelete() {
           <button type="button" class="btn-primary" :disabled="importing" @click="importSelected">
             <DownloadCloud class="h-4 w-4" />
             {{ importing ? t('common.loading') : t('facebook.importSelected') }}
-          </button>
-        </div>
-      </div>
-    </BaseModal>
-
-    <!-- Comment auto-engagement -->
-    <BaseModal v-model="showEngage" :title="t('facebook.engagementTitle')">
-      <div class="space-y-4">
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('facebook.engagementHint') }}</p>
-
-        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-          <input v-model="engageForm.auto_like_comments" type="checkbox" class="mt-0.5 h-4 w-4" />
-          <span class="min-w-0">
-            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoLike') }}</span>
-            <span class="block text-xs text-gray-400">{{ t('facebook.autoLikeHint') }}</span>
-          </span>
-        </label>
-
-        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-          <input v-model="engageForm.auto_reply_comments" type="checkbox" class="mt-0.5 h-4 w-4" />
-          <span class="min-w-0">
-            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoReply') }}</span>
-            <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyHint') }}</span>
-          </span>
-        </label>
-
-        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-          <input v-model="engageForm.auto_reply_messages" type="checkbox" class="mt-0.5 h-4 w-4" />
-          <span class="min-w-0">
-            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('facebook.autoReplyMessages') }}</span>
-            <span class="block text-xs text-gray-400">{{ t('facebook.autoReplyMessagesHint') }}</span>
-          </span>
-        </label>
-
-        <div v-if="engageForm.auto_reply_comments || engageForm.auto_reply_messages">
-          <label class="label">{{ t('facebook.replyPersona') }}</label>
-          <textarea
-            v-model="engageForm.reply_persona"
-            rows="3"
-            class="input text-sm"
-            :placeholder="t('facebook.replyPersonaPlaceholder')"
-          />
-        </div>
-
-        <p
-          v-if="engageForm.auto_reply_messages"
-          class="rounded-lg bg-blue-50 p-2 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-        >
-          {{ t('facebook.autoReplyMessagesScopes') }}
-        </p>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="label">{{ t('facebook.engageInterval') }}</label>
-            <input
-              v-model.number="engageForm.engage_interval_minutes"
-              type="number"
-              min="5"
-              max="1440"
-              class="input text-sm"
-            />
-            <span class="mt-1 block text-xs text-gray-400">{{ t('facebook.engageIntervalHint') }}</span>
-          </div>
-          <div>
-            <label class="label">{{ t('facebook.engageMaxActions') }}</label>
-            <input
-              v-model.number="engageForm.engage_max_actions"
-              type="number"
-              min="1"
-              max="200"
-              class="input text-sm"
-            />
-            <span class="mt-1 block text-xs text-gray-400">{{ t('facebook.engageMaxActionsHint') }}</span>
-          </div>
-        </div>
-
-        <p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-          {{ t('facebook.engagementScopes') }}
-        </p>
-
-        <!-- Recent processed comments -->
-        <div>
-          <div class="mb-2 flex items-center justify-between">
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('facebook.recentComments') }}</span>
-            <button class="btn-ghost text-xs" :disabled="engagingNow" @click="engageNow">
-              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': engagingNow }" />
-              {{ t('facebook.engageNow') }}
-            </button>
-          </div>
-          <p v-if="!comments.length" class="text-xs text-gray-400">{{ t('facebook.noComments') }}</p>
-          <div v-else class="max-h-56 space-y-2 overflow-y-auto">
-            <div
-              v-for="c in comments"
-              :key="c.id"
-              class="rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class="truncate font-medium text-gray-900 dark:text-white">{{ c.commenter_name || '—' }}</span>
-                <span class="flex shrink-0 gap-1.5">
-                  <span v-if="c.liked" class="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-300">
-                    <ThumbsUp class="h-3 w-3" /> {{ t('facebook.liked') }}
-                  </span>
-                  <span v-if="c.replied" class="inline-flex items-center gap-0.5 text-green-600 dark:text-green-300">
-                    <MessageCircle class="h-3 w-3" /> {{ t('facebook.replied') }}
-                  </span>
-                </span>
-              </div>
-              <p class="mt-0.5 truncate text-gray-500 dark:text-gray-400">{{ c.message || '—' }}</p>
-              <p v-if="c.reply_text" class="mt-1 truncate italic text-gray-400">↳ {{ c.reply_text }}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <button type="button" class="btn-secondary" @click="showEngage = false">{{ t('common.cancel') }}</button>
-          <button type="button" class="btn-primary" :disabled="savingEngage" @click="saveEngage">
-            {{ savingEngage ? t('common.loading') : t('common.save') }}
           </button>
         </div>
       </div>
