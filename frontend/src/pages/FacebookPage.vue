@@ -45,11 +45,11 @@ const importToken = ref('')
 const { loading: importing, run: runImport } = useAsync()
 
 // Two-step sync: 'token' collects the token, 'select' lets the operator pick
-// which discovered pages to import (only shown when the token manages >1 page).
+// the single page to import (only shown when the token manages >1 page).
+// A project manages exactly one page, so the choice is single-select.
 const importStep = ref<'token' | 'select'>('token')
 const discovered = ref<FacebookDiscoveredPage[]>([])
-const selectedIds = reactive<Record<string, boolean>>({})
-const allSelected = computed(() => discovered.value.length > 0 && discovered.value.every((p) => selectedIds[p.page_id]))
+const selectedPageId = ref<string>('')
 
 async function load() {
   if (!projectId.value) return
@@ -103,23 +103,17 @@ async function discoverPages() {
     return
   }
   discovered.value = found
-  for (const p of found) selectedIds[p.page_id] = true
+  selectedPageId.value = found[0]?.page_id ?? ''
   importStep.value = 'select'
 }
 
-function toggleSelectAll() {
-  const next = !allSelected.value
-  for (const p of discovered.value) selectedIds[p.page_id] = next
-}
-
-// Step 2: import the chosen pages.
+// Step 2: import the chosen page.
 async function importSelected() {
-  const ids = discovered.value.filter((p) => selectedIds[p.page_id]).map((p) => p.page_id)
-  if (!ids.length) {
+  if (!selectedPageId.value) {
     toast.error(t('facebook.selectAtLeastOne'))
     return
   }
-  await doImport(ids)
+  await doImport([selectedPageId.value])
 }
 
 async function doImport(pageIds: string[]) {
@@ -457,22 +451,22 @@ async function doDelete() {
         </div>
       </div>
 
-      <!-- Step 2: choose which pages to import -->
+      <!-- Step 2: choose the single page to import -->
       <div v-else class="space-y-4">
         <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('facebook.selectHint') }}</p>
-
-        <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          <input type="checkbox" class="h-4 w-4" :checked="allSelected" @change="toggleSelectAll" />
-          {{ t('facebook.selectAll') }}
-        </label>
 
         <div class="max-h-72 space-y-2 overflow-y-auto">
           <label
             v-for="p in discovered"
             :key="p.page_id"
-            class="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+            class="flex cursor-pointer items-center gap-3 rounded-lg border p-3 dark:border-gray-700"
+            :class="
+              selectedPageId === p.page_id
+                ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30'
+                : 'border-gray-200'
+            "
           >
-            <input v-model="selectedIds[p.page_id]" type="checkbox" class="h-4 w-4" />
+            <input v-model="selectedPageId" :value="p.page_id" type="radio" name="import-page" class="h-4 w-4" />
             <div class="rounded-lg bg-blue-50 p-2 text-blue-600 dark:bg-blue-950 dark:text-blue-300">
               <Facebook class="h-4 w-4" />
             </div>
