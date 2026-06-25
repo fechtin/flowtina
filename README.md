@@ -1,9 +1,12 @@
 # Flowtina
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+
 **Autonomous AI Content Operating System** — a production-grade AI content
 automation platform that generates content with AI, aggregates Internet sources,
-schedules and publishes to Facebook Pages, and reports to Telegram. Designed to
-run 24/7 on a 1 CPU / 1 GB VPS with **no Docker, no Redis, no Celery**.
+schedules and publishes to Facebook Pages, engages with comments and Messenger
+DMs, and reports to Telegram. Designed to run 24/7 on a 1 CPU / 1 GB VPS with
+**no Docker, no Redis, no Celery**.
 
 > Built per the specification documents in this repository (`# *.md`). Clean
 > Architecture · SOLID · Repository + Service layers · SQLite-first · async I/O.
@@ -50,6 +53,20 @@ FastAPI  ── Middlewares (request-id, rate limit)
 `collect sources → deduplicate (SHA-256) → summarize (cheap model) → render
 layered prompt → generate (provider + fallback) → quality score (regenerate if
 < 60) → save draft → schedule → publish (Facebook) → Telegram report → log`.
+
+---
+
+## Social engagement
+
+Beyond publishing, Flowtina engages with the audience automatically:
+
+- **Comment engagement** — an APScheduler poller auto-likes and AI-replies to
+  comments on the Page's feed (requires the `pages_manage_engagement` scope).
+- **Messenger DM auto-reply** — memory-aware replies to Page direct messages via
+  webhook.
+- **Long-term memory** — per-follower memory (rolling transcript plus scored,
+  deduplicated memories with embeddings) recalls past conversations so replies
+  stay human and contextual across both comments and Messenger.
 
 ---
 
@@ -121,3 +138,17 @@ Memory < 300 MB · idle CPU < 5 % · cold start < 3 s · single process · SQLit
 bcrypt password hashing · JWT access/refresh · AES (Fernet) encryption for API
 keys & tokens at rest · per-IP rate limiting · input validation (Pydantic) ·
 audit-ready logging · token masking in responses/logs · no root execution.
+
+---
+
+## License
+
+Flowtina is licensed under the **GNU Affero General Public License v3.0**
+(AGPL-3.0). See the [LICENSE](LICENSE) file for the full text.
+
+The AGPL adds a network-use clause to the GPL: if you run a modified version of
+Flowtina as a network service, you must make the complete corresponding source
+code available to its users. You are free to use, study, modify, and
+redistribute the software under the same license.
+
+Copyright © 2026 Flowtina contributors.
