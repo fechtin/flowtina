@@ -177,12 +177,14 @@ class FacebookPageOut(TimestampedSchema):
     enabled: bool
     auto_like_comments: bool = False
     auto_reply_comments: bool = False
+    auto_reply_messages: bool = False
     reply_persona: str | None = None
 
 
 class FacebookEngagementUpdate(BaseModel):
     auto_like_comments: bool | None = None
     auto_reply_comments: bool | None = None
+    auto_reply_messages: bool | None = None
     reply_persona: str | None = Field(default=None, max_length=2000)
 
 

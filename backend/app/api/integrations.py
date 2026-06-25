@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, Request
+import json
+
+from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_owned_project
@@ -24,6 +27,7 @@ from app.schemas.content import (
 )
 from app.services.facebook_engagement_service import FacebookEngagementService
 from app.services.facebook_service import FacebookService
+from app.services.messenger_service import MessengerService
 from app.services.telegram_service import TelegramService
 
 router = APIRouter(tags=["integrations"])
@@ -89,11 +93,12 @@ def update_engagement(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Enable/disable auto-like and AI auto-reply for a page's comments."""
+    """Enable/disable auto-like, comment auto-reply and Messenger auto-reply."""
     page = FacebookEngagementService(db).update_settings(
         page_id,
         auto_like_comments=payload.auto_like_comments,
         auto_reply_comments=payload.auto_reply_comments,
+        auto_reply_messages=payload.auto_reply_messages,
         reply_persona=payload.reply_persona,
     )
     return ok(FacebookPageOut.model_validate(page).model_dump(), "Engagement updated")
@@ -185,6 +190,41 @@ async def telegram_webhook(
     except Exception:  # noqa: BLE001 - never surface errors to Telegram
         pass
     return {"ok": True}
+
+
+@router.get("/messenger/webhook")
+async def verify_messenger_webhook(
+    hub_mode: str | None = Query(default=None, alias="hub.mode"),
+    hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
+    hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
+):
+    """Meta's one-time webhook verification handshake (GET challenge)."""
+    if hub_mode == "subscribe" and hub_verify_token == MessengerService.verify_token():
+        return PlainTextResponse(hub_challenge or "")
+    return PlainTextResponse("forbidden", status_code=403)
+
+
+@router.post("/messenger/webhook")
+async def messenger_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_hub_signature_256: str | None = Header(default=None),
+):
+    """Public endpoint Meta calls with incoming Messenger events.
+
+    Authenticated via the app-secret HMAC signature. Always returns 200 so Meta
+    does not retry; processing errors are swallowed and logged.
+    """
+    raw = await request.body()
+    if not MessengerService.verify_signature(raw, x_hub_signature_256):
+        return {"status": "ok"}
+    try:
+        payload = json.loads(raw or b"{}")
+        if payload.get("object") == "page":
+            await MessengerService(db).handle_event(payload)
+    except Exception:  # noqa: BLE001 - never surface errors to Meta
+        pass
+    return {"status": "ok"}
 
 
 @router.post("/projects/{project_id}/telegram/test")

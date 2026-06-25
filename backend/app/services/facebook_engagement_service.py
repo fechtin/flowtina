@@ -52,6 +52,7 @@ class FacebookEngagementService:
         *,
         auto_like_comments: bool | None = None,
         auto_reply_comments: bool | None = None,
+        auto_reply_messages: bool | None = None,
         reply_persona: str | None = None,
     ) -> FacebookPage:
         page = self.pages.get(page_id)
@@ -61,6 +62,8 @@ class FacebookEngagementService:
             page.auto_like_comments = auto_like_comments
         if auto_reply_comments is not None:
             page.auto_reply_comments = auto_reply_comments
+        if auto_reply_messages is not None:
+            page.auto_reply_messages = auto_reply_messages
         if reply_persona is not None:
             page.reply_persona = reply_persona.strip() or None
         self.db.commit()

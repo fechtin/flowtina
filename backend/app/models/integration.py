@@ -25,6 +25,9 @@ class FacebookPage(Base, BaseModelMixin):
     # pages_read_engagement + pages_manage_engagement.
     auto_like_comments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     auto_reply_comments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # When enabled, the Messenger webhook AI-replies to direct messages. Requires
+    # the page token to carry pages_messaging.
+    auto_reply_messages: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Optional persona/guidance steering AI-generated comment replies.
     reply_persona: Mapped[str | None] = mapped_column(Text, nullable=True)
 

@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # for a long-lived one before discovering Pages.
     facebook_app_id: str = ""
     facebook_app_secret: str = ""
+    # --- Messenger (direct messages, webhook-driven) ---
+    # Token echoed back during Meta's webhook verification (GET challenge). Set
+    # the same value in the Messenger webhook config on the Meta dashboard.
+    messenger_verify_token: str = ""
     # --- Comment auto-engagement (poller) ---
     # How often the scheduler polls pages with auto-like/auto-reply enabled.
     facebook_engage_interval_minutes: int = 10

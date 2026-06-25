@@ -175,6 +175,11 @@ class AIUsageLogRepository(BaseRepository[AIUsageLog]):
 class FacebookPageRepository(BaseRepository[FacebookPage]):
     model = FacebookPage
 
+    def get_by_fb_page_id(self, fb_page_id: str) -> FacebookPage | None:
+        """Resolve a connected page by its Facebook page id (webhook ``entry.id``)."""
+        rows = self.list(page_id=fb_page_id, limit=1)
+        return rows[0] if rows else None
+
 
 class FacebookPostRepository(BaseRepository[FacebookPost]):
     model = FacebookPost
