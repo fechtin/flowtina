@@ -17,6 +17,7 @@ from app.models.integration import (
     TelegramConfig,
     TelegramLog,
 )
+from app.models.memory import Conversation, ConversationMessage, Memory
 from app.models.post import (
     AIUsageLog,
     Post,
@@ -190,6 +191,99 @@ class FacebookCommentRepository(BaseRepository[FacebookComment]):
 
     def list_for_page(self, page_id: str, limit: int = 50) -> list[FacebookComment]:
         return self.list(page_id=page_id, order_by="created_at", desc=True, limit=limit)
+
+
+class ConversationRepository(BaseRepository[Conversation]):
+    model = Conversation
+
+    def get_or_create(
+        self,
+        *,
+        project_id: str,
+        page_id: str,
+        channel: str,
+        external_user_id: str,
+        user_name: str | None = None,
+    ) -> Conversation:
+        """Return the conversation for this user/page/channel, creating it once."""
+        existing = self.get_by(
+            page_id=page_id, channel=channel, external_user_id=external_user_id
+        )
+        if existing:
+            if user_name and existing.user_name != user_name:
+                existing.user_name = user_name
+                self.db.flush()
+            return existing
+        return self.create(
+            project_id=project_id,
+            page_id=page_id,
+            channel=channel,
+            external_user_id=external_user_id,
+            user_name=user_name,
+        )
+
+    def list_active(self, limit: int | None = None) -> list[Conversation]:
+        """Conversations with at least one stored message, newest activity first."""
+        stmt = (
+            self._base_query()
+            .where(Conversation.message_count > 0)
+            .order_by(Conversation.last_message_at.desc().nullslast())
+        )
+        if limit:
+            stmt = stmt.limit(limit)
+        return list(self.db.execute(stmt).scalars().all())
+
+
+class ConversationMessageRepository(BaseRepository[ConversationMessage]):
+    model = ConversationMessage
+
+    def recent(self, conversation_id: str, limit: int = 6) -> list[ConversationMessage]:
+        """Most recent turns first; caller reverses for chronological context."""
+        return self.list(
+            conversation_id=conversation_id, order_by="created_at", desc=True, limit=limit
+        )
+
+
+class MemoryRepository(BaseRepository[Memory]):
+    model = Memory
+
+    def list_active(self, conversation_id: str) -> list[Memory]:
+        """All non-archived memories for a conversation (for in-process search)."""
+        return self.list(
+            conversation_id=conversation_id,
+            archived=False,
+            order_by="importance",
+            desc=True,
+            limit=None,
+        )
+
+    def by_type(self, conversation_id: str, mem_type: str, limit: int) -> list[Memory]:
+        return self.list(
+            conversation_id=conversation_id,
+            archived=False,
+            type=mem_type,
+            order_by="created_at",
+            desc=True,
+            limit=limit,
+        )
+
+    def recent(self, conversation_id: str, limit: int) -> list[Memory]:
+        return self.list(
+            conversation_id=conversation_id,
+            archived=False,
+            order_by="created_at",
+            desc=True,
+            limit=limit,
+        )
+
+    def important(self, conversation_id: str, limit: int) -> list[Memory]:
+        return self.list(
+            conversation_id=conversation_id,
+            archived=False,
+            order_by="importance",
+            desc=True,
+            limit=limit,
+        )
 
 
 class TelegramConfigRepository(BaseRepository[TelegramConfig]):

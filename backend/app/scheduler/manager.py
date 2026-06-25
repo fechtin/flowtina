@@ -118,6 +118,15 @@ class SchedulerManager:
             id="maintenance_engage_comments",
             replace_existing=True,
         )
+        if settings.memory_enabled:
+            self.scheduler.add_job(
+                task_jobs.consolidate_memories,
+                trigger=CronTrigger.from_crontab(
+                    settings.memory_consolidation_cron, timezone="UTC"
+                ),
+                id="maintenance_consolidate_memories",
+                replace_existing=True,
+            )
 
 
 scheduler_manager = SchedulerManager()

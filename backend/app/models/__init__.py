@@ -32,9 +32,13 @@ from app.models.source import (
     Topic,
     URLSource,
 )
+from app.models.memory import Conversation, ConversationMessage, Memory
 from app.models.user import RefreshToken, User, UserSettings
 
 __all__ = [
+    "Conversation",
+    "ConversationMessage",
+    "Memory",
     "User",
     "RefreshToken",
     "UserSettings",

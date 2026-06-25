@@ -17,7 +17,8 @@ from app.core.exceptions import FacebookException, NotFoundException
 from app.core.logger import get_logger
 from app.core.security import decrypt_secret
 from app.models.integration import FacebookPage
-from app.prompts.defaults import DEFAULT_REPLY_PROMPT
+from app.models.memory import CHANNEL_COMMENT, Conversation
+from app.prompts.defaults import DEFAULT_REPLY_PROMPT, DEFAULT_REPLY_WITH_MEMORY_PROMPT
 from app.prompts.engine import prompt_engine
 from app.repositories.repositories import (
     FacebookCommentRepository,
@@ -25,6 +26,7 @@ from app.repositories.repositories import (
 )
 from app.services.ai_service import AIService
 from app.services.facebook_service import GRAPH_API
+from app.services.memory.service import MemoryService
 from app.utils.text import strip_markdown
 
 log = get_logger("facebook")
@@ -38,6 +40,9 @@ class FacebookEngagementService:
         self.pages = FacebookPageRepository(db)
         self.comments = FacebookCommentRepository(db)
         self.ai = AIService(db)
+        # Per-follower long-term memory. Built lazily only when enabled so the
+        # default (memory off) path is unchanged.
+        self.memory = MemoryService(db) if settings.memory_enabled else None
 
     # --- settings & reads ---
 
@@ -160,11 +165,16 @@ class FacebookEngagementService:
 
         if page.auto_reply_comments and message:
             try:
-                reply = await self._build_reply(page, post_message, message)
+                reply, conversation = await self._build_reply(
+                    page, post_message, message, author
+                )
                 if reply:
                     await self._reply_comment(comment_id, reply, token)
                     record.replied = True
                     record.reply_text = reply
+                    # Only persist the exchange once the reply actually posted.
+                    if conversation is not None and self.memory is not None:
+                        await self.memory.record_exchange(conversation, message, reply)
             except Exception as exc:  # noqa: BLE001 - record failure, keep going
                 errors.append(f"reply: {exc}")
 
@@ -176,20 +186,52 @@ class FacebookEngagementService:
 
     # --- AI reply ---
 
-    async def _build_reply(self, page: FacebookPage, post_message: str, comment: str) -> str:
+    async def _build_reply(
+        self, page: FacebookPage, post_message: str, comment: str, author: dict
+    ) -> tuple[str, Conversation | None]:
+        """Generate a reply, personalized from memory when available.
+
+        Returns ``(reply_text, conversation)``. ``conversation`` is non-None only
+        when memory is active and the commenter has a usable id, signalling the
+        caller to record the exchange after the reply posts.
+        """
         persona = (
             f"Voice and guidance: {page.reply_persona}" if page.reply_persona else ""
         )
+        fb_user_id = str(author.get("id") or "")
+        if self.memory is None or not fb_user_id:
+            prompt = prompt_engine.render(
+                DEFAULT_REPLY_PROMPT,
+                {
+                    "persona": persona,
+                    "post_content": post_message[:1500],
+                    "comment": comment[:1000],
+                },
+            )
+            result = await self.ai.generate(page.project_id, prompt)
+            return strip_markdown(result.text).strip()[:8000], None
+
+        conversation = self.memory.get_conversation(
+            project_id=page.project_id,
+            page_id=page.id,
+            channel=CHANNEL_COMMENT,
+            external_user_id=fb_user_id,
+            user_name=author.get("name"),
+        )
+        context = await self.memory.build_context(conversation, comment)
         prompt = prompt_engine.render(
-            DEFAULT_REPLY_PROMPT,
+            DEFAULT_REPLY_WITH_MEMORY_PROMPT,
             {
                 "persona": persona,
+                "user_name": conversation.user_name or "this follower",
+                "memory_context": context["memory_context"],
+                "history": context["history"],
                 "post_content": post_message[:1500],
                 "comment": comment[:1000],
             },
         )
         result = await self.ai.generate(page.project_id, prompt)
-        return strip_markdown(result.text).strip()[:8000]
+        return strip_markdown(result.text).strip()[:8000], conversation
 
     # --- Graph API ---
 

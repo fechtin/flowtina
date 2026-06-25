@@ -86,6 +86,33 @@ class Settings(BaseSettings):
     # Comments fetched per post per poll (newest first).
     facebook_engage_max_comments: int = 50
 
+    # --- Long-term memory (per-user recall across conversations) ---
+    # Master switch. When off, the engagement flow behaves exactly as before.
+    memory_enabled: bool = True
+    # Embedding backend used for semantic dedupe/retrieval:
+    #   "hash"     - dependency-free feature-hash embedding (offline, deterministic)
+    #   "gemini"   - Google text-embedding-004 via API (multilingual, needs gemini key)
+    #   "model2vec"- local open-source static embeddings (needs the optional
+    #                ``model2vec`` package installed; falls back to hash if missing)
+    memory_embedding_provider: str = "hash"
+    memory_embedding_model: str = "text-embedding-004"
+    # Fixed embedding dimension. Mock and real backends are interchangeable as
+    # long as this stays constant; changing it requires re-embedding memories.
+    memory_embedding_dim: int = 256
+    # A memory is stored when importance >= this OR it is an emotional/preference
+    # event (see scorer). Range 1..100.
+    memory_save_threshold: int = 60
+    # Two memories with cosine similarity above this are merged, not duplicated.
+    memory_dedupe_similarity: float = 0.90
+    # Max memories injected into a reply prompt (after 4-bucket merge + ranking).
+    memory_retrieval_limit: int = 30
+    # Verbatim transcript turns kept inline as short-term context per reply.
+    memory_history_turns: int = 6
+    # Nightly consolidation (merge/decay/summary/archive). UTC cron expression.
+    memory_consolidation_cron: str = "0 2 * * *"
+    # Archive lowest-scoring memories once a user exceeds this count.
+    memory_archive_cap: int = 10000
+
     # --- Rate limiting (requests / minute) ---
     rate_limit_anonymous: int = 30
     rate_limit_authenticated: int = 300

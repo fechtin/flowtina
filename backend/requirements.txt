@@ -18,3 +18,9 @@ jinja2==3.1.5
 psutil==6.1.1
 email-validator==2.2.0
 pyyaml==6.0.2
+
+# Optional: local open-source embeddings for long-term memory
+# (memory_embedding_provider="model2vec"). Lightweight static embeddings, no
+# torch. Install only for offline semantic recall instead of the dependency-free
+# "hash" default or the Gemini API backend.
+# model2vec==0.3.3

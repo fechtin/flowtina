@@ -76,3 +76,53 @@ DEFAULT_REPLY_PROMPT = (
     "not ask for personal data; and do not include hashtags or links. Write plain text "
     "only with no Markdown. Return only the reply text."
 )
+
+# Memory-aware variant of the reply prompt: same rules, but the model is given
+# what the page already knows about this specific follower so replies feel
+# personal and continuous, like a real person who remembers them.
+DEFAULT_REPLY_WITH_MEMORY_PROMPT = (
+    "You manage the social media page that published the post below. You are "
+    "replying to {{user_name}}, a follower you have talked with before.\n"
+    "{{persona}}\n"
+    "What you remember about this follower (use naturally, never recite or quote it "
+    "back, never reveal you store notes):\n{{memory_context}}\n\n"
+    "Recent conversation with this follower:\n{{history}}\n\n"
+    "Post:\n{{post_content}}\n\n"
+    "Their new comment:\n{{comment}}\n\n"
+    "Reply rules: write in the SAME language as the follower's comment; be warm and "
+    "concise (1-2 sentences); stay on topic; reflect what you remember only when "
+    "relevant; never invent facts or make promises; do not ask for personal data; "
+    "do not include hashtags or links. Write plain text only with no Markdown. "
+    "Return only the reply text."
+)
+
+# Extracts durable memories from one exchange. MUST return JSON only.
+DEFAULT_MEMORY_EXTRACTION_PROMPT = (
+    "You maintain long-term memory for a social media page about the follower "
+    "named {{user_name}}. From the exchange below, extract only durable facts worth "
+    "remembering for future conversations.\n\n"
+    "Exchange:\n{{exchange}}\n\n"
+    "Classify each memory as one of: semantic (a stable fact, e.g. job, preference), "
+    "episodic (a life event, e.g. moving, new job), emotional (a strong feeling or "
+    "moment), relationship (a milestone between the follower and the page).\n"
+    "Score importance 1-100 = emotional_intensity(0-40) + future_usefulness(0-30) + "
+    "repetition(0-20) + uniqueness(0-10).\n"
+    "DO save: preferences, goals, family/career facts, strong emotions, major events. "
+    "DO NOT save: greetings, thanks, small talk, weather, jokes, or anything already "
+    "obvious. If nothing is worth saving, return an empty list.\n"
+    "Return ONLY this JSON, no prose, no Markdown:\n"
+    '{"memories": [{"type": "semantic", "content": "...", "importance": 0, "reason": "..."}]}'
+)
+
+# Consolidation summaries (architecture §9). Each must stay under 1500 chars.
+DEFAULT_PROFILE_SUMMARY_PROMPT = (
+    "Write a concise third-person profile of a social media follower from these "
+    "remembered facts. Cover who they are, their preferences, goals and situation. "
+    "Under 1500 characters, plain text, no Markdown.\n\nFacts:\n{{memories}}"
+)
+
+DEFAULT_RELATIONSHIP_SUMMARY_PROMPT = (
+    "Summarize the relationship between the page and this follower from the milestones "
+    "and emotional moments below: how they relate, recurring topics, and tone to keep. "
+    "Under 1500 characters, plain text, no Markdown.\n\nMoments:\n{{memories}}"
+)

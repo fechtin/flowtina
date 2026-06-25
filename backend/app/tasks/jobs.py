@@ -92,6 +92,30 @@ def engage_comments() -> None:
         db.close()
 
 
+def consolidate_memories() -> None:
+    """Nightly: decay, archive and re-summarize each follower's long-term memory."""
+    from app.repositories.repositories import ConversationRepository
+    from app.services.memory.service import MemoryService
+
+    db = SessionLocal()
+    try:
+        service = MemoryService(db)
+        conversations = ConversationRepository(db).list_active()
+        done = 0
+        for conversation in conversations:
+            try:
+                _run_async(service.consolidate(conversation))
+                db.commit()
+                done += 1
+            except Exception as exc:  # noqa: BLE001 - one bad user must not stop others
+                db.rollback()
+                log.warning(f"Memory consolidation failed for {conversation.id}: {exc}")
+        if done:
+            log.info(f"Memory consolidation processed {done} conversation(s)")
+    finally:
+        db.close()
+
+
 def cleanup_logs(retention_days: int = 30) -> None:
     """Delete system logs older than the retention window."""
     from app.repositories.repositories import SystemLogRepository
