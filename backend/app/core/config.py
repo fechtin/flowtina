@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     # --- Scheduler ---
     scheduler_max_threads: int = 2
     scheduler_enabled: bool = True
+    # The scheduler uses an in-memory jobstore (no shared SQLite jobstore) to avoid
+    # write contention that could lock the DB and kill the scheduler loop. Because
+    # that store is not shared with the API process, the scheduler reconciles
+    # DB-defined jobs into it on this interval so API create/update/delete take
+    # effect without a restart.
+    scheduler_resync_seconds: int = 60
 
     # --- Public URL & Telegram webhook ---
     # Public HTTPS base URL of the deployment, e.g. https://example.com
