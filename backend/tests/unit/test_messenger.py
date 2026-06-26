@@ -222,6 +222,26 @@ def test_instagram_dm_replies_via_send_api(db_session, monkeypatch):
     assert captured[0][1] == "igsid-1"  # replied to the IGSID
 
 
+def test_empty_ai_reply_is_retried_not_dropped(db_session, monkeypatch):
+    """A blank AI reply must not be marked processed (silently lost) — it is
+    failed/retried so the follower still gets answered on a later tick."""
+    monkeypatch.setattr(settings, "messenger_debounce_seconds", 0)
+    _make_page(db_session)
+    service = MessengerService(db_session)
+    sent = _wire(service)
+    service.ai = _FakeAI("")  # provider returns empty content
+
+    assert service.enqueue_event(_payload(mid="empty-1")) == 1
+    assert asyncio.run(service.process_inbox()) == 0  # nothing was sent
+    assert sent == []
+
+    events = MessengerEventRepository(db_session).list(channel="messenger")
+    assert len(events) == 1
+    ev = events[0]
+    assert ev.status != "processed"  # not swallowed as success
+    assert ev.attempts >= 1  # recorded a failed attempt -> eligible for retry
+
+
 def test_instagram_dm_ignored_when_ig_toggle_off(db_session):
     """IG DMs are not queued when only the Facebook DM toggle is on."""
     _make_page(

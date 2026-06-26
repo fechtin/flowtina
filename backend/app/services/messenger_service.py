@@ -198,13 +198,18 @@ class MessengerService:
             reply, conversation = await self._build_reply(
                 page, sender_id, combined, channel
             )
-            if reply:
-                await self._send(url, sender_id, reply, token)
-                if conversation is not None and self.memory is not None:
-                    await self.memory.record_exchange(conversation, combined, reply)
+            if not reply:
+                # A blank AI reply (a transient model glitch or a rate-limited
+                # provider returning empty content) must not be swallowed as
+                # success: that silently drops the follower's message with no
+                # retry. Fail it so the poller retries on the next tick.
+                raise RuntimeError("empty AI reply")
+            await self._send(url, sender_id, reply, token)
+            if conversation is not None and self.memory is not None:
+                await self.memory.record_exchange(conversation, combined, reply)
             self._finish(events, "processed")
             self.db.commit()
-            return bool(reply)
+            return True
         except Exception as exc:  # noqa: BLE001 - retry/cap instead of losing the message
             self.db.rollback()
             self._fail(events, str(exc))
