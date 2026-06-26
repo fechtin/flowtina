@@ -180,9 +180,11 @@ def test_first_contact_uses_plain_prompt_then_memory(db_session, monkeypatch):
     assert marker in prompts[-1]  # now remembered -> memory-aware prompt
 
 
-def test_instagram_dm_replies_via_ig_endpoint(db_session, monkeypatch):
-    """An object=="instagram" webhook is routed by IG account id and replied to
-    through the Instagram Send endpoint, gated by its own toggle."""
+def test_instagram_dm_replies_via_send_api(db_session, monkeypatch):
+    """An object=="instagram" webhook is routed by IG account id, tagged with the
+    ig_dm channel, and replied to through the page Send API, gated by its own
+    toggle. Instagram messaging via Facebook login uses /me/messages, the same
+    endpoint as Messenger (recipient is an IGSID)."""
     monkeypatch.setattr(settings, "messenger_debounce_seconds", 0)
     _make_page(
         db_session,
@@ -216,8 +218,8 @@ def test_instagram_dm_replies_via_ig_endpoint(db_session, monkeypatch):
     assert ev.channel == "ig_dm"
 
     assert asyncio.run(service.process_inbox()) == 1
-    assert captured and "ig-77/messages" in captured[0][0]  # IG Send endpoint
-    assert captured[0][1] == "igsid-1"
+    assert captured and captured[0][0].endswith("/me/messages")  # page Send API
+    assert captured[0][1] == "igsid-1"  # replied to the IGSID
 
 
 def test_instagram_dm_ignored_when_ig_toggle_off(db_session):

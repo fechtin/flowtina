@@ -184,7 +184,12 @@ class MessengerService:
         ordered = sorted(events, key=lambda e: _as_utc(e.created_at))
         combined = "\n".join(e.text for e in ordered[: settings.messenger_coalesce_max])
         token = decrypt_secret(page.access_token_encrypted)
-        url = self._messages_url(page, is_instagram)
+        # Instagram messaging via Facebook login uses the SAME page-scoped Send
+        # API as Messenger: POST /me/messages with the page token and the
+        # recipient's id (a PSID for Messenger, an IGSID for Instagram). Meta
+        # routes by recipient id type. The /{ig-user-id}/messages form is the
+        # separate Instagram-login API and fails with "(#3) capability" here.
+        url = f"{GRAPH_API}/me/messages"
         try:
             # Acknowledge the follower so the bubble shows "Seen" + typing while we
             # generate; both are best-effort and never block the actual reply.
@@ -274,17 +279,6 @@ class MessengerService:
         return strip_markdown(text).strip()[:_MAX_MESSAGE_CHARS]
 
     # --- Send API ---
-
-    @staticmethod
-    def _messages_url(page: FacebookPage, is_instagram: bool) -> str:
-        """Select the Send endpoint: Instagram posts to the IG account id.
-
-        Both use the page access token; Facebook Messenger uses ``/me/messages``
-        while Instagram messaging targets ``/{ig-user-id}/messages``.
-        """
-        if is_instagram:
-            return f"{GRAPH_API}/{page.instagram_user_id}/messages"
-        return f"{GRAPH_API}/me/messages"
 
     async def _send(self, url: str, recipient_id: str, message: str, token: str) -> None:
         payload = {
