@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api import (
     auth,
     dashboard,
+    growth,
     integrations,
     jobs,
     posts,
@@ -14,6 +15,7 @@ from app.api import (
     prompts,
     public,
     sources,
+    video,
 )
 
 api_router = APIRouter()
@@ -26,3 +28,5 @@ api_router.include_router(jobs.router)
 api_router.include_router(integrations.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(public.router)
+api_router.include_router(growth.router)
+api_router.include_router(video.router)

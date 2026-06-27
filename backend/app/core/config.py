@@ -185,6 +185,10 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     claude_api_key: str = ""
 
+    # --- GPU providers (video generation) ---
+    vast_api_key: str = ""
+    runpod_api_key: str = ""
+
     def provider_api_key(self, provider: str) -> str:
         """Return the env-configured API key for ``provider`` (empty if none)."""
         return str(getattr(self, f"{provider.lower()}_api_key", "") or "")
