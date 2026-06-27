@@ -302,6 +302,8 @@ export default {
     engageNoPosts: 'Trang chưa có bài viết gần đây để tương tác.',
     recentComments: 'Bình luận gần đây',
     noComments: 'Chưa xử lý bình luận nào.',
+    recentMessages: 'Tin nhắn (DM) gần đây',
+    noMessages: 'Chưa xử lý tin nhắn nào.',
     liked: 'Đã like',
     replied: 'Đã trả lời',
   },

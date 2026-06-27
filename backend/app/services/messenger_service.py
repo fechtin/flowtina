@@ -118,22 +118,38 @@ class MessengerService:
         sender_id = str((event.get("sender") or {}).get("id", ""))
         message = event.get("message") or {}
         text = (message.get("text") or "").strip()
-        # Skip echoes of our own messages, delivery/read receipts and non-text.
-        if message.get("is_echo") or not sender_id or not text:
+        attachments = message.get("attachments") or []
+
+        # Extract the first image URL if present.
+        image_url = None
+        for attachment in attachments:
+            if attachment.get("type") == "image":
+                image_url = (attachment.get("payload") or {}).get("url")
+                if image_url:
+                    break
+
+        # Skip echoes of our own messages and delivery/read receipts.
+        if message.get("is_echo") or not sender_id:
+            return False
+        # Skip if both text and image are missing.
+        if not text and not image_url:
             return False
         if self_id and sender_id == self_id:
             return False
+
         mid = message.get("mid")
         # Meta retries webhook delivery on slow responses; the unique mid makes
         # re-delivery a no-op so a follower is never answered twice.
         if mid and self.events.exists_by_mid(str(mid)):
             return False
+
         self.events.create(
             page_id=page.id,
             channel=channel,
             sender_id=sender_id,
             mid=str(mid) if mid else None,
-            text=text[:_MAX_INBOUND_CHARS],
+            text=text[:_MAX_INBOUND_CHARS] if text else None,
+            image_url=image_url[:2000] if image_url else None,
         )
         return True
 
@@ -182,7 +198,13 @@ class MessengerService:
             return False
 
         ordered = sorted(events, key=lambda e: _as_utc(e.created_at))
-        combined = "\n".join(e.text for e in ordered[: settings.messenger_coalesce_max])
+        lines = []
+        for e in ordered[: settings.messenger_coalesce_max]:
+            if e.text:
+                lines.append(e.text)
+            if e.image_url:
+                lines.append(f"[Follower sent an image: {e.image_url}]")
+        combined = "\n".join(lines)
         token = decrypt_secret(page.access_token_encrypted)
         # Instagram messaging via Facebook login uses the SAME page-scoped Send
         # API as Messenger: POST /me/messages with the page token and the

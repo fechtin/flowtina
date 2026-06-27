@@ -99,7 +99,8 @@ class MessengerEvent(Base, BaseModelMixin):
     sender_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     # Meta's per-message id; unique so retried webhook deliveries are ignored.
     mid: Mapped[str | None] = mapped_column(String(191), unique=True, nullable=True)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # pending -> processed | failed. Indexed: the poller scans pending rows.
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True, nullable=False)
     # Send attempts so far; capped to stop retrying a permanently failing message.

@@ -246,6 +246,15 @@ export interface FacebookComment {
   created_at?: string
 }
 
+export interface FacebookMessage {
+  id: string
+  sender_id: string
+  text?: string | null
+  image_url?: string | null
+  status: string
+  created_at: string
+}
+
 export interface TelegramConfig {
   id?: string
   project_id?: string

@@ -302,6 +302,8 @@ export default {
     engageNoPosts: 'No recent posts found on this page to engage with.',
     recentComments: 'Recent comments',
     noComments: 'No comments processed yet.',
+    recentMessages: 'Recent direct messages (DMs)',
+    noMessages: 'No messages processed yet.',
     liked: 'Liked',
     replied: 'Replied',
   },

@@ -137,6 +137,18 @@ def list_comments(
     return ok([FacebookCommentOut.model_validate(c).model_dump() for c in comments])
 
 
+@router.get("/facebook/pages/{page_id}/messages")
+def list_messages(
+    page_id: str,
+    limit: int = 50,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List DMs the webhook has enqueued for this page."""
+    events = MessengerService(db).events.list(page_id=page_id, limit=limit, order_by="created_at", desc=True)
+    return ok([{"id": e.id, "sender_id": e.sender_id, "text": e.text, "image_url": e.image_url, "status": e.status, "created_at": e.created_at} for e in events])
+
+
 @router.post("/facebook/pages/{page_id}/engage-now")
 async def engage_now(
     page_id: str,

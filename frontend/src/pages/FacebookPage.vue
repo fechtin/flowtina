@@ -24,7 +24,7 @@ import { useCurrentProject } from '@/composables/useCurrentProject'
 import { useAsync } from '@/composables/useAsync'
 import { extractErrorMessage } from '@/services/http'
 import { useToastStore } from '@/stores/toast'
-import type { FacebookPage, FacebookDiscoveredPage, FacebookComment } from '@/types'
+import type { FacebookPage, FacebookDiscoveredPage, FacebookComment, FacebookMessage } from '@/types'
 
 const { t } = useI18n()
 const toast = useToastStore()
@@ -142,6 +142,7 @@ const engageForm = reactive({
   engage_max_actions: 25,
 })
 const comments = ref<FacebookComment[]>([])
+const messages = ref<FacebookMessage[]>([])
 const { loading: savingEngage, run: runEngage } = useAsync()
 const { loading: engagingNow, run: runEngageNow } = useAsync()
 
@@ -177,14 +178,27 @@ watch(
     engageForm.engage_max_actions = page.engage_max_actions ?? 25
     platformForm.publish_facebook = page.publish_facebook ?? true
     platformForm.publish_instagram = !!page.publish_instagram
-    void loadComments(page.id)
+    void loadEngagementData(page.id)
   },
   { immediate: true },
 )
 
+async function loadEngagementData(id: string) {
+  void loadComments(id)
+  void loadMessages(id)
+}
+
 async function loadComments(id: string) {
   try {
     comments.value = await facebookService.listComments(id)
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  }
+}
+
+async function loadMessages(id: string) {
+  try {
+    messages.value = await facebookService.listMessages(id)
   } catch (err) {
     toast.error(extractErrorMessage(err))
   }
@@ -431,34 +445,68 @@ async function doDelete() {
         </p>
 
         <!-- Recent processed comments -->
-        <div>
-          <div class="mb-2 flex items-center justify-between">
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('facebook.recentComments') }}</span>
-            <button class="btn-ghost text-xs" :disabled="engagingNow" @click="engageNow">
-              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': engagingNow }" />
-              {{ t('facebook.engageNow') }}
-            </button>
-          </div>
-          <p v-if="!comments.length" class="text-xs text-gray-400">{{ t('facebook.noComments') }}</p>
-          <div v-else class="max-h-56 space-y-2 overflow-y-auto">
-            <div
-              v-for="c in comments"
-              :key="c.id"
-              class="rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class="truncate font-medium text-gray-900 dark:text-white">{{ c.commenter_name || '—' }}</span>
-                <span class="flex shrink-0 gap-1.5">
-                  <span v-if="c.liked" class="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-300">
-                    <ThumbsUp class="h-3 w-3" /> {{ t('facebook.liked') }}
+        <div class="space-y-4">
+          <div>
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('facebook.recentComments') }}</span>
+              <button class="btn-ghost text-xs" :disabled="engagingNow" @click="engageNow">
+                <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': engagingNow }" />
+                {{ t('facebook.engageNow') }}
+              </button>
+            </div>
+            <p v-if="!comments.length" class="text-xs text-gray-400">{{ t('facebook.noComments') }}</p>
+            <div v-else class="max-h-56 space-y-2 overflow-y-auto">
+              <div
+                v-for="c in comments"
+                :key="c.id"
+                class="rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate font-medium text-gray-900 dark:text-white">{{ c.commenter_name || '—' }}</span>
+                  <span class="flex shrink-0 gap-1.5">
+                    <span v-if="c.liked" class="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-300">
+                      <ThumbsUp class="h-3 w-3" /> {{ t('facebook.liked') }}
+                    </span>
+                    <span v-if="c.replied" class="inline-flex items-center gap-0.5 text-green-600 dark:text-green-300">
+                      <MessageCircle class="h-3 w-3" /> {{ t('facebook.replied') }}
+                    </span>
                   </span>
-                  <span v-if="c.replied" class="inline-flex items-center gap-0.5 text-green-600 dark:text-green-300">
-                    <MessageCircle class="h-3 w-3" /> {{ t('facebook.replied') }}
-                  </span>
-                </span>
+                </div>
+                <p class="mt-0.5 truncate text-gray-500 dark:text-gray-400">{{ c.message || '—' }}</p>
+                <p v-if="c.reply_text" class="mt-1 truncate italic text-gray-400">↳ {{ c.reply_text }}</p>
               </div>
-              <p class="mt-0.5 truncate text-gray-500 dark:text-gray-400">{{ c.message || '—' }}</p>
-              <p v-if="c.reply_text" class="mt-1 truncate italic text-gray-400">↳ {{ c.reply_text }}</p>
+            </div>
+          </div>
+
+          <div>
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('facebook.recentMessages') }}</span>
+              <button class="btn-ghost text-xs" @click="loadMessages(engagePage.id)">
+                <RefreshCw class="h-3.5 w-3.5" /> {{ t('common.refresh') }}
+              </button>
+            </div>
+            <p v-if="!messages.length" class="text-xs text-gray-400">{{ t('facebook.noMessages') }}</p>
+            <div v-else class="max-h-56 space-y-2 overflow-y-auto">
+              <div
+                v-for="m in messages"
+                :key="m.id"
+                class="rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate font-medium text-gray-900 dark:text-white">User: {{ m.sender_id }}</span>
+                  <span
+                    class="rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase"
+                    :class="m.status === 'processed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30' : 'bg-gray-100 text-gray-600 dark:bg-gray-800'"
+                  >
+                    {{ m.status }}
+                  </span>
+                </div>
+                <p v-if="m.text" class="mt-0.5 text-gray-500 dark:text-gray-400">{{ m.text }}</p>
+                <div v-if="m.image_url" class="mt-2">
+                  <img :src="m.image_url" class="max-h-32 rounded object-cover" loading="lazy" />
+                  <p class="mt-1 truncate text-[10px] text-gray-400">{{ m.image_url }}</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
