@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -77,7 +75,7 @@ def upsert_config(
 # ---- Trend Discovery ----
 
 @router.post("/pages/{page_id}/discover", response_model=list[TrendTopicOut])
-def run_discovery(
+async def run_discovery(
     page_id: str,
     body: RunDiscoveryRequest,
     user: User = Depends(get_current_user),
@@ -85,10 +83,7 @@ def run_discovery(
     db: Session = Depends(get_db),
 ):
     _resolve_project_id(page_id, user, db)
-    topics = asyncio.get_event_loop().run_until_complete(
-        svc.run_discovery(page_id, body.sources, body.max_per_source)
-    )
-    return topics
+    return await svc.run_discovery(page_id, body.sources, body.max_per_source)
 
 
 @router.get("/pages/{page_id}/topics", response_model=list[TrendTopicOut])
@@ -107,7 +102,7 @@ def list_topics(
 # ---- Content Drafts ----
 
 @router.post("/pages/{page_id}/drafts/generate", response_model=ContentDraftOut, status_code=status.HTTP_201_CREATED)
-def generate_draft(
+async def generate_draft(
     page_id: str,
     body: GenerateDraftRequest,
     user: User = Depends(get_current_user),
@@ -115,10 +110,7 @@ def generate_draft(
     db: Session = Depends(get_db),
 ):
     project_id = _resolve_project_id(page_id, user, db)
-    draft = asyncio.get_event_loop().run_until_complete(
-        svc.generate_draft(page_id, project_id, body.topic_id, body.content_type)
-    )
-    return draft
+    return await svc.generate_draft(page_id, project_id, body.topic_id, body.content_type)
 
 
 @router.get("/pages/{page_id}/drafts", response_model=list[ContentDraftOut])
