@@ -32,6 +32,7 @@ from app.repositories.repositories import (
 from app.services.ai_service import AIService
 from app.services.facebook_service import GRAPH_API
 from app.services.memory.service import MemoryService
+from app.services.vision_service import describe_image
 from app.utils.text import strip_markdown
 
 log = get_logger("facebook")
@@ -203,7 +204,11 @@ class MessengerService:
             if e.text:
                 lines.append(e.text)
             if e.image_url:
-                lines.append(f"[Follower sent an image: {e.image_url}]")
+                description = await describe_image(e.image_url)
+                if description:
+                    lines.append(f"[Follower sent an image. Image content: {description}]")
+                else:
+                    lines.append("[Follower sent an image (could not analyze)]")
         combined = "\n".join(lines)
         token = decrypt_secret(page.access_token_encrypted)
         # Instagram messaging via Facebook login uses the SAME page-scoped Send
