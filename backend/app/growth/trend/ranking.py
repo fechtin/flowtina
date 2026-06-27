@@ -57,12 +57,12 @@ def _trend_score(topic: DiscoveredTopic) -> float:
 
 
 def _audience_match(topic: DiscoveredTopic, target_categories: list[str], blocked_keywords: list[str]) -> float:
-    if not target_categories:
-        return 60.0
     combined = f"{topic.title} {topic.summary}".lower()
     for kw in blocked_keywords:
         if kw.lower() in combined:
             return 0.0
+    if not target_categories:
+        return 60.0
     match_count = sum(1 for cat in target_categories if cat.lower() in combined)
     if match_count == 0:
         return 20.0
