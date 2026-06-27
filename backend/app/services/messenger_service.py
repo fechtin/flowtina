@@ -28,6 +28,8 @@ from app.prompts.engine import prompt_engine
 from app.repositories.repositories import (
     FacebookPageRepository,
     MessengerEventRepository,
+    ProjectRepository,
+    UserSettingsRepository,
 )
 from app.services.ai_service import AIService
 from app.services.facebook_service import GRAPH_API
@@ -57,6 +59,22 @@ class MessengerService:
         self.events = MessengerEventRepository(db)
         self.ai = AIService(db)
         self.memory = MemoryService(db) if settings.memory_enabled else None
+        self._user_settings = UserSettingsRepository(db)
+        self._projects = ProjectRepository(db)
+
+    def _groq_api_key(self, project_id: str) -> str | None:
+        """Resolve the owner's Groq API key from DB settings (same as AIService)."""
+        project = self._projects.get(project_id)
+        if not project:
+            return None
+        prefs = self._user_settings.get_by(user_id=project.user_id)
+        if not prefs or prefs.default_provider != "groq":
+            return None
+        return (
+            decrypt_secret(prefs.default_api_key_encrypted or "")
+            or settings.groq_api_key
+            or None
+        )
 
     # --- webhook auth ---
 
@@ -199,12 +217,13 @@ class MessengerService:
             return False
 
         ordered = sorted(events, key=lambda e: _as_utc(e.created_at))
+        groq_key = self._groq_api_key(page.project_id)
         lines = []
         for e in ordered[: settings.messenger_coalesce_max]:
             if e.text:
                 lines.append(e.text)
             if e.image_url:
-                description = await describe_image(e.image_url)
+                description = await describe_image(e.image_url, api_key=groq_key)
                 if description:
                     lines.append(f"[Follower sent an image. Image content: {description}]")
                 else:

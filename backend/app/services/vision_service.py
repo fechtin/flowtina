@@ -28,12 +28,14 @@ _DESCRIBE_PROMPT = (
 )
 
 
-async def describe_image(image_url: str) -> str | None:
+async def describe_image(image_url: str, api_key: str | None = None) -> str | None:
     """Return a plain-text description of *image_url* using a Groq vision model.
 
-    Returns ``None`` when the Groq API key is missing or all models fail.
+    *api_key* should be the Groq key resolved from the DB (UserSettings).
+    Falls back to the env-configured ``GROQ_API_KEY`` when not supplied.
+    Returns ``None`` when no key is available or all models fail.
     """
-    api_key = settings.groq_api_key
+    api_key = api_key or settings.groq_api_key
     if not api_key:
         log.debug("vision_service: groq_api_key not configured, skipping image analysis")
         return None
