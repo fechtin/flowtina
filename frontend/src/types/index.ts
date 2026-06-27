@@ -312,3 +312,117 @@ export interface LogEntry {
   message: string
   created_at: string
 }
+
+// ---------- Growth Engine ----------
+
+export interface GrowthConfig {
+  id: string
+  page_id: string
+  enabled: boolean
+  brand_name: string
+  language: string
+  tone: string
+  content_categories: string
+  posts_per_day: number
+  blocked_keywords: string
+  quality_threshold: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TrendTopic {
+  id: string
+  page_id: string
+  title: string
+  summary: string
+  source_url: string
+  source_name: string
+  content_format: string
+  status: string
+  freshness_score: number
+  trend_score: number
+  audience_match_score: number
+  total_score: number
+  published_at: string | null
+  created_at: string
+}
+
+export interface ContentDraft {
+  id: string
+  page_id: string
+  topic_id: string | null
+  content_type: string
+  hook: string
+  body: string
+  caption: string
+  hashtags: string
+  image_prompt: string
+  review_notes: string
+  quality_score: number
+  status: string
+  approved_at: string | null
+  rejected_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface QuotaStatus {
+  provider: string
+  model: string
+  date: string
+  requests_used: number
+  requests_limit: number
+  tokens_used: number
+  tokens_limit: number
+}
+
+export interface GrowthInsights {
+  total_topics: number
+  total_drafts: number
+  approved_drafts: number
+  rejected_drafts: number
+  avg_quality_score: number
+  best_performing_format: string | null
+}
+
+// ---------- Video Engine ----------
+
+export type VideoJobStatus =
+  | 'pending'
+  | 'waiting_gpu'
+  | 'starting_gpu'
+  | 'uploading'
+  | 'processing'
+  | 'downloading'
+  | 'completed'
+  | 'published'
+  | 'failed'
+  | 'cancelled'
+
+export interface VideoJob {
+  id: string
+  page_id: string
+  title: string
+  script: string
+  avatar_image_url: string | null
+  voice_id: string
+  language: string
+  output_url: string | null
+  thumbnail_url: string | null
+  duration_seconds: number | null
+  status: VideoJobStatus
+  error_message: string | null
+  gpu_instance_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface GPUInstance {
+  id: string
+  provider: string
+  instance_id: string
+  status: string
+  cost_per_hour: number | null
+  ip_address: string | null
+  created_at: string
+}

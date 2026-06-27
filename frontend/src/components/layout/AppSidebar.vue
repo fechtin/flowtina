@@ -14,6 +14,8 @@ import {
   ScrollText,
   Settings,
   X,
+  TrendingUp,
+  Video,
 } from 'lucide-vue-next'
 
 defineProps<{ open: boolean }>()
@@ -30,6 +32,8 @@ const links = [
   { name: 'posts', to: '/posts', icon: Newspaper, label: 'nav.posts' },
   { name: 'facebook', to: '/facebook', icon: Facebook, label: 'nav.facebook' },
   { name: 'telegram', to: '/telegram', icon: Send, label: 'nav.telegram' },
+  { name: 'growth', to: '/growth', icon: TrendingUp, label: 'nav.growth' },
+  { name: 'video', to: '/video', icon: Video, label: 'nav.video' },
   { name: 'logs', to: '/logs', icon: ScrollText, label: 'nav.logs' },
   { name: 'settings', to: '/settings', icon: Settings, label: 'nav.settings' },
 ]

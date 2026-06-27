@@ -8,6 +8,13 @@ import type {
   FacebookPage,
   FacebookDiscoveredPage,
   FacebookComment,
+  GrowthConfig,
+  TrendTopic,
+  ContentDraft,
+  QuotaStatus,
+  GrowthInsights,
+  VideoJob,
+  GPUInstance,
   FacebookEngagementUpdate,
   FacebookPlatformUpdate,
   FacebookMessage,
@@ -240,4 +247,44 @@ export const settingsService = {
 export const logService = {
   list: (params: { level?: string; module?: string; limit?: number } = {}) =>
     http.get<unknown, LogEntry[]>('/logs', { params }),
+}
+
+// ---------- Growth Engine ----------
+export const growthService = {
+  getConfig: (pageId: string) =>
+    http.get<unknown, GrowthConfig>(`/growth/pages/${pageId}/config`),
+  upsertConfig: (pageId: string, payload: Partial<GrowthConfig>) =>
+    http.put<unknown, GrowthConfig>(`/growth/pages/${pageId}/config`, payload),
+  discover: (pageId: string, maxPerSource = 10) =>
+    http.post<unknown, TrendTopic[]>(`/growth/pages/${pageId}/discover`, { max_per_source: maxPerSource }),
+  listTopics: (pageId: string, status?: string) =>
+    http.get<unknown, TrendTopic[]>(`/growth/pages/${pageId}/topics${status ? `?status=${status}` : ''}`),
+  generateDraft: (pageId: string, topicId: string, contentType = 'post') =>
+    http.post<unknown, ContentDraft>(`/growth/pages/${pageId}/drafts/generate`, { topic_id: topicId, content_type: contentType }),
+  listDrafts: (pageId: string, status?: string) =>
+    http.get<unknown, ContentDraft[]>(`/growth/pages/${pageId}/drafts${status ? `?status=${status}` : ''}`),
+  approveDraft: (pageId: string, draftId: string) =>
+    http.post<unknown, ContentDraft>(`/growth/pages/${pageId}/drafts/${draftId}/approve`, {}),
+  rejectDraft: (pageId: string, draftId: string, notes = '') =>
+    http.post<unknown, ContentDraft>(`/growth/pages/${pageId}/drafts/${draftId}/reject?notes=${encodeURIComponent(notes)}`, {}),
+  getInsights: (pageId: string) =>
+    http.get<unknown, GrowthInsights>(`/growth/pages/${pageId}/insights`),
+  getQuota: (provider: string, model: string) =>
+    http.get<unknown, QuotaStatus>(`/growth/quota/${provider}/${model}`),
+}
+
+// ---------- Video Engine ----------
+export const videoService = {
+  createJob: (pageId: string, payload: { title: string; script: string; voice_id?: string; language?: string; avatar_image_url?: string }) =>
+    http.post<unknown, VideoJob>(`/video/jobs`, { page_id: pageId, ...payload }),
+  getJob: (jobId: string) =>
+    http.get<unknown, VideoJob>(`/video/jobs/${jobId}`),
+  listJobs: (pageId: string) =>
+    http.get<unknown, VideoJob[]>(`/video/pages/${pageId}/jobs`),
+  cancelJob: (jobId: string) =>
+    http.post<unknown, VideoJob>(`/video/jobs/${jobId}/cancel`, {}),
+  listGPUInstances: () =>
+    http.get<unknown, GPUInstance[]>(`/video/gpu/instances`),
+  cleanupGPU: () =>
+    http.post<unknown, { cleaned: number }>(`/video/gpu/cleanup`, {}),
 }
