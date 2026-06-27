@@ -22,8 +22,10 @@ from app.growth.models import (
     TrendTopic,
 )
 from app.growth.planner.planner import ContentPlanner
-from app.growth.trend.discovery import discover_trending
+from app.growth.trend.discovery import discover_from_rss, discover_from_url, discover_trending
 from app.growth.trend.ranking import rank_topics
+from app.models.integration import FacebookPage
+from app.models.source import RSSSource, Topic, URLSource
 
 log = get_logger("growth.service")
 
@@ -55,12 +57,34 @@ class GrowthService:
     # Trend Discovery
     # ------------------------------------------------------------------
 
+    def _get_project_id(self, page_id: str) -> str | None:
+        page = self.db.query(FacebookPage).filter_by(id=page_id).first()
+        return page.project_id if page else None
+
     async def run_discovery(self, page_id: str, sources: list[str] | None = None, max_per_source: int = 10) -> list[TrendTopic]:
         cfg = self.get_config(page_id)
-        custom_sources = sources
-        if not custom_sources and cfg and cfg.trend_sources:
-            custom_sources = [s.strip() for s in cfg.trend_sources.split(",") if s.strip()]
-        raw_topics = await discover_trending(custom_sources, max_per_source)
+
+        # Resolve sources from page's project if not explicitly provided
+        if sources:
+            custom_sources = sources
+            raw_topics = await discover_trending(custom_sources, max_per_source)
+        else:
+            project_id = self._get_project_id(page_id)
+            if project_id:
+                rss_urls = [
+                    r.url for r in
+                    self.db.query(RSSSource).filter_by(project_id=project_id, enabled=True).all()
+                ]
+                url_sources = [
+                    u.url for u in
+                    self.db.query(URLSource).filter_by(project_id=project_id, enabled=True).all()
+                ]
+                rss_tasks = [discover_from_rss(url, max_per_source) for url in rss_urls]
+                url_tasks = [discover_from_url(url) for url in url_sources]
+                results = await asyncio.gather(*rss_tasks, *url_tasks, return_exceptions=True)
+                raw_topics = [t for r in results if isinstance(r, list) for t in r]
+            else:
+                raw_topics = await discover_trending(None, max_per_source)
         categories = []
         blocked = []
         if cfg:
@@ -68,6 +92,14 @@ class GrowthService:
                 categories = [c.strip() for c in cfg.content_categories.split(",") if c.strip()]
             if cfg.blocked_keywords:
                 blocked = [k.strip() for k in cfg.blocked_keywords.split(",") if k.strip()]
+        # Merge project topics as additional category signals
+        project_id = self._get_project_id(page_id)
+        if project_id:
+            project_topics = [
+                t.topic for t in
+                self.db.query(Topic).filter_by(project_id=project_id, active=True).all()
+            ]
+            categories = list(dict.fromkeys(categories + project_topics))
         scored = rank_topics(raw_topics, categories, blocked, top_n=30)
         planner = ContentPlanner(self.db, page_id)
         posts_per_day = cfg.posts_per_day if cfg else 1
