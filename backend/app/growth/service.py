@@ -7,9 +7,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.growth.content.content_generator import generate_post
 from app.growth.content.hook_generator import generate_best_hook
+from app.growth.content.image_generator import ImageGenerationError, generate_image
 from app.growth.content.reviewer import check_duplicate_in_db, review_content
 from app.growth.gateway.gateway import AIGateway
 from app.growth.gateway.quota import QuotaManager
@@ -26,6 +28,7 @@ from app.growth.trend.discovery import discover_from_rss, discover_from_url, dis
 from app.growth.trend.ranking import rank_topics
 from app.models.integration import FacebookPage
 from app.models.source import RSSSource, Topic, URLSource
+from app.utils.media import save_bytes
 
 log = get_logger("growth.service")
 
@@ -160,6 +163,16 @@ class GrowthService:
         if review.passed and cfg and cfg.auto_publish and not cfg.approval_required:
             status = "approved"
 
+        # Best-effort image generation (FLUX.1-schnell via Cloudflare). A failure
+        # — unconfigured, quota exhausted, timeout — degrades to a text-only draft.
+        media_url = None
+        if settings.growth_image_enabled and content.image_prompt:
+            try:
+                image_bytes = await generate_image(content.image_prompt)
+                media_url = save_bytes(image_bytes, page_id, ".jpg")
+            except ImageGenerationError as exc:
+                log.warning(f"Image generation skipped for page {page_id}: {exc}")
+
         draft = ContentDraft(
             page_id=page_id,
             topic_id=topic_id,
@@ -170,6 +183,7 @@ class GrowthService:
             cta=content.cta,
             hashtags=",".join(content.hashtags),
             image_prompt=content.image_prompt,
+            media_url=media_url,
             quality_score=review.score,
             review_notes=review.notes,
             status=status if review.passed else "rejected",

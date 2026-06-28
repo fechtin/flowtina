@@ -36,6 +36,11 @@ const savingConfig = ref(false)
 const showDraftModal = ref(false)
 const activeDraft = ref<ContentDraft | null>(null)
 
+const apiBase = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+function draftImage(draft: ContentDraft): string | null {
+  return draft.media_url ? `${apiBase}/public/growth/drafts/${draft.id}/image` : null
+}
+
 const configForm = ref({
   enabled: true,
   brand_name: '',
@@ -298,6 +303,13 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
               @click="openDraft(draft)"
             >
               <div class="flex items-start justify-between gap-4">
+                <img
+                  v-if="draftImage(draft)"
+                  :src="draftImage(draft)!"
+                  alt=""
+                  loading="lazy"
+                  class="h-16 w-16 shrink-0 rounded-lg object-cover bg-gray-100 dark:bg-gray-800"
+                />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', statusBadge(draft.status)]">{{ draft.status }}</span>
@@ -405,6 +417,12 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
           <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', statusBadge(activeDraft.status)]">{{ activeDraft.status }}</span>
           <span class="text-xs text-gray-400">Quality: {{ activeDraft.quality_score }}</span>
         </div>
+        <img
+          v-if="draftImage(activeDraft)"
+          :src="draftImage(activeDraft)!"
+          alt=""
+          class="w-full rounded-xl object-cover bg-gray-100 dark:bg-gray-800"
+        />
         <div>
           <p class="text-xs font-medium uppercase text-gray-400">Hook</p>
           <p class="mt-1 text-gray-900 dark:text-white">{{ activeDraft.hook }}</p>

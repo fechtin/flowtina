@@ -357,6 +357,7 @@ export interface ContentDraft {
   caption: string
   hashtags: string
   image_prompt: string
+  media_url: string | null
   review_notes: string
   quality_score: number
   status: string

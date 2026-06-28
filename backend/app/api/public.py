@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import NotFoundException
+from app.growth.models import ContentDraft
 from app.repositories.repositories import PostRepository
 from app.utils.media import upload_abs_path
 
@@ -28,6 +29,22 @@ def public_post_image(post_id: str, db: Session = Depends(get_db)):
     if not post or not post.image_path:
         raise NotFoundException("Image not available")
     abs_path = upload_abs_path(post.image_path)
+    if not abs_path.exists():
+        raise NotFoundException("Image is no longer available")
+    return FileResponse(abs_path)
+
+
+@router.get("/public/growth/drafts/{draft_id}/image")
+def public_draft_image(draft_id: str, db: Session = Depends(get_db)):
+    """Serve a Growth draft's generated image for the dashboard and Meta."""
+    draft = (
+        db.query(ContentDraft)
+        .filter(ContentDraft.id == draft_id, ContentDraft.deleted_at.is_(None))
+        .first()
+    )
+    if not draft or not draft.media_url:
+        raise NotFoundException("Image not available")
+    abs_path = upload_abs_path(draft.media_url)
     if not abs_path.exists():
         raise NotFoundException("Image is no longer available")
     return FileResponse(abs_path)

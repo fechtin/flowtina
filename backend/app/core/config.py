@@ -189,6 +189,15 @@ class Settings(BaseSettings):
     vast_api_key: str = ""
     runpod_api_key: str = ""
 
+    # --- Cloudflare Workers AI (image generation: FLUX.1-schnell) ---
+    # Serverless image model — no local GPU. The REST endpoint returns the image
+    # base64-encoded inside JSON. Free tier is metered in Neurons/day.
+    cloudflare_account_id: str = ""
+    cloudflare_api_token: str = ""
+    flux_model: str = "@cf/black-forest-labs/flux-1-schnell"
+    flux_steps: int = 4  # schnell accepts 1..8; lower is faster/cheaper.
+    growth_image_enabled: bool = True
+
     def provider_api_key(self, provider: str) -> str:
         """Return the env-configured API key for ``provider`` (empty if none)."""
         return str(getattr(self, f"{provider.lower()}_api_key", "") or "")

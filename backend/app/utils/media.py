@@ -76,6 +76,26 @@ async def save_upload(file: UploadFile, post_id: str) -> str:
     return rel_path
 
 
+def save_bytes(data: bytes, owner_id: str, ext: str = ".jpg") -> str:
+    """Persist raw image bytes under ``owner_id`` and return the relative path.
+
+    Used for generated (not uploaded) images such as Growth Engine draft
+    artwork. Enforces ``upload_max_bytes`` so a runaway API response can't fill
+    the disk.
+    """
+    if not data:
+        raise ValidationException("Generated image is empty.")
+    if len(data) > settings.upload_max_bytes:
+        raise ValidationException(
+            f"Image exceeds the {settings.upload_max_bytes // (1024 * 1024)} MiB limit."
+        )
+    dest_dir = _upload_root() / owner_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    rel_path = f"{owner_id}/{uuid.uuid4().hex}{ext}"
+    (_upload_root() / rel_path).write_bytes(data)
+    return rel_path
+
+
 def remove_upload(rel_path: str) -> None:
     """Delete a stored upload and prune its now-empty post directory."""
     if not rel_path:
