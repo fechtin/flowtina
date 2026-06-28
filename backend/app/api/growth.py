@@ -99,6 +99,33 @@ def list_topics(
     return svc.list_topics(page_id, status=status, limit=limit)
 
 
+@router.delete("/pages/{page_id}/topics")
+def clear_topics(
+    page_id: str,
+    user: User = Depends(get_current_user),
+    svc: GrowthService = Depends(_get_service),
+    db: Session = Depends(get_db),
+):
+    _resolve_project_id(page_id, user, db)
+    return {"deleted": svc.delete_all_topics(page_id)}
+
+
+@router.delete("/pages/{page_id}/topics/{topic_id}")
+def delete_topic(
+    page_id: str,
+    topic_id: str,
+    user: User = Depends(get_current_user),
+    svc: GrowthService = Depends(_get_service),
+    db: Session = Depends(get_db),
+):
+    _resolve_project_id(page_id, user, db)
+    try:
+        svc.delete_topic(topic_id, page_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"deleted": 1}
+
+
 # ---- Content Drafts ----
 
 @router.post("/pages/{page_id}/drafts/generate", response_model=ContentDraftOut, status_code=status.HTTP_201_CREATED)
@@ -124,6 +151,33 @@ def list_drafts(
 ):
     _resolve_project_id(page_id, user, db)
     return svc.list_drafts(page_id, status=status, limit=limit)
+
+
+@router.delete("/pages/{page_id}/drafts")
+def clear_drafts(
+    page_id: str,
+    user: User = Depends(get_current_user),
+    svc: GrowthService = Depends(_get_service),
+    db: Session = Depends(get_db),
+):
+    _resolve_project_id(page_id, user, db)
+    return {"deleted": svc.delete_all_drafts(page_id)}
+
+
+@router.delete("/pages/{page_id}/drafts/{draft_id}")
+def delete_draft(
+    page_id: str,
+    draft_id: str,
+    user: User = Depends(get_current_user),
+    svc: GrowthService = Depends(_get_service),
+    db: Session = Depends(get_db),
+):
+    _resolve_project_id(page_id, user, db)
+    try:
+        svc.delete_draft(draft_id, page_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"deleted": 1}
 
 
 @router.get("/pages/{page_id}/drafts/{draft_id}", response_model=ContentDraftOut)

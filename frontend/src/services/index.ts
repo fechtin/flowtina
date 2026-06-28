@@ -259,10 +259,18 @@ export const growthService = {
     http.post<unknown, TrendTopic[]>(`/growth/pages/${pageId}/discover`, { max_per_source: maxPerSource }),
   listTopics: (pageId: string, status?: string) =>
     http.get<unknown, TrendTopic[]>(`/growth/pages/${pageId}/topics${status ? `?status=${status}` : ''}`),
+  deleteTopic: (pageId: string, topicId: string) =>
+    http.delete<unknown, { deleted: number }>(`/growth/pages/${pageId}/topics/${topicId}`),
+  clearTopics: (pageId: string) =>
+    http.delete<unknown, { deleted: number }>(`/growth/pages/${pageId}/topics`),
   generateDraft: (pageId: string, topicId: string, contentType = 'post') =>
     http.post<unknown, ContentDraft>(`/growth/pages/${pageId}/drafts/generate`, { topic_id: topicId, content_type: contentType }),
   listDrafts: (pageId: string, status?: string) =>
     http.get<unknown, ContentDraft[]>(`/growth/pages/${pageId}/drafts${status ? `?status=${status}` : ''}`),
+  deleteDraft: (pageId: string, draftId: string) =>
+    http.delete<unknown, { deleted: number }>(`/growth/pages/${pageId}/drafts/${draftId}`),
+  clearDrafts: (pageId: string) =>
+    http.delete<unknown, { deleted: number }>(`/growth/pages/${pageId}/drafts`),
   approveDraft: (pageId: string, draftId: string) =>
     http.post<unknown, ContentDraft>(`/growth/pages/${pageId}/drafts/${draftId}/approve`, {}),
   rejectDraft: (pageId: string, draftId: string, notes = '') =>

@@ -3,12 +3,13 @@ import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   TrendingUp, FileText, Settings, BarChart2,
-  RefreshCw, CheckCircle2, XCircle, Zap, ChevronRight,
+  RefreshCw, CheckCircle2, XCircle, Zap, ChevronRight, Trash2,
 } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import NoProjectNotice from '@/components/ui/NoProjectNotice.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { growthService, facebookService } from '@/services'
 import { useCurrentProject } from '@/composables/useCurrentProject'
 import { useToastStore } from '@/stores/toast'
@@ -39,6 +40,72 @@ const activeDraft = ref<ContentDraft | null>(null)
 const apiBase = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 function draftImage(draft: ContentDraft): string | null {
   return draft.media_url ? `${apiBase}/public/growth/drafts/${draft.id}/image` : null
+}
+
+const showConfirm = ref(false)
+const confirmMessage = ref('')
+let confirmAction: (() => Promise<void>) | null = null
+
+function askConfirm(message: string, action: () => Promise<void>) {
+  confirmMessage.value = message
+  confirmAction = action
+  showConfirm.value = true
+}
+
+async function runConfirm() {
+  const action = confirmAction
+  confirmAction = null
+  if (action) await action()
+}
+
+function deleteDraft(draft: ContentDraft) {
+  askConfirm(t('growth.confirmDeleteDraft'), async () => {
+    try {
+      await growthService.deleteDraft(selectedPageId.value, draft.id)
+      drafts.value = drafts.value.filter(d => d.id !== draft.id)
+      if (activeDraft.value?.id === draft.id) showDraftModal.value = false
+      toast.success(t('growth.draftDeleted'))
+    } catch (err) {
+      toast.error(extractErrorMessage(err))
+    }
+  })
+}
+
+function clearDrafts() {
+  askConfirm(t('growth.confirmClearDrafts'), async () => {
+    try {
+      const { deleted } = await growthService.clearDrafts(selectedPageId.value)
+      drafts.value = []
+      showDraftModal.value = false
+      toast.success(t('growth.itemsCleared', { count: deleted }))
+    } catch (err) {
+      toast.error(extractErrorMessage(err))
+    }
+  })
+}
+
+function deleteTopic(topic: TrendTopic) {
+  askConfirm(t('growth.confirmDeleteTopic'), async () => {
+    try {
+      await growthService.deleteTopic(selectedPageId.value, topic.id)
+      topics.value = topics.value.filter(tp => tp.id !== topic.id)
+      toast.success(t('growth.topicDeleted'))
+    } catch (err) {
+      toast.error(extractErrorMessage(err))
+    }
+  })
+}
+
+function clearTopics() {
+  askConfirm(t('growth.confirmClearTopics'), async () => {
+    try {
+      const { deleted } = await growthService.clearTopics(selectedPageId.value)
+      topics.value = []
+      toast.success(t('growth.itemsCleared', { count: deleted }))
+    } catch (err) {
+      toast.error(extractErrorMessage(err))
+    }
+  })
 }
 
 const configForm = ref({
@@ -243,7 +310,15 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
 
         <!-- TRENDS TAB -->
         <div v-if="activeTab === 'trends'" class="flex flex-col gap-4">
-          <div class="flex justify-end">
+          <div class="flex justify-end gap-2">
+            <button
+              v-if="topics.length"
+              class="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+              @click="clearTopics"
+            >
+              <Trash2 class="h-4 w-4" />
+              {{ t('growth.clearAll') }}
+            </button>
             <button
               class="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
               :disabled="discovering"
@@ -278,14 +353,23 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
                     <span class="font-medium">Total: <span :class="scoreColor(topic.total_score)">{{ topic.total_score }}</span></span>
                   </div>
                 </div>
-                <button
-                  class="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:bg-primary-900/30 dark:text-primary-300"
-                  :disabled="generatingDraftId === topic.id"
-                  @click="generateDraft(topic)"
-                >
-                  <Zap class="h-4 w-4" :class="{ 'animate-pulse': generatingDraftId === topic.id }" />
-                  {{ generatingDraftId === topic.id ? t('growth.generating') : t('growth.generateDraft') }}
-                </button>
+                <div class="flex shrink-0 items-start gap-2">
+                  <button
+                    class="flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:bg-primary-900/30 dark:text-primary-300"
+                    :disabled="generatingDraftId === topic.id"
+                    @click="generateDraft(topic)"
+                  >
+                    <Zap class="h-4 w-4" :class="{ 'animate-pulse': generatingDraftId === topic.id }" />
+                    {{ generatingDraftId === topic.id ? t('growth.generating') : t('growth.generateDraft') }}
+                  </button>
+                  <button
+                    class="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
+                    :title="t('common.delete')"
+                    @click="deleteTopic(topic)"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -293,6 +377,16 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
 
         <!-- DRAFTS TAB -->
         <div v-if="activeTab === 'drafts'" class="flex flex-col gap-4">
+          <div v-if="drafts.length" class="flex justify-end">
+            <button
+              class="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+              @click="clearDrafts"
+            >
+              <Trash2 class="h-4 w-4" />
+              {{ t('growth.clearAll') }}
+            </button>
+          </div>
+
           <EmptyState v-if="!drafts.length" :title="t('growth.noDrafts')" :description="t('growth.noDraftsHint')" />
 
           <div v-else class="flex flex-col gap-3">
@@ -319,7 +413,16 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
                   <p class="mt-1 font-medium text-gray-900 line-clamp-1 dark:text-white">{{ draft.hook }}</p>
                   <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{{ draft.body }}</p>
                 </div>
-                <ChevronRight class="h-5 w-5 shrink-0 text-gray-400" />
+                <div class="flex shrink-0 items-center gap-1">
+                  <button
+                    class="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
+                    :title="t('common.delete')"
+                    @click.stop="deleteDraft(draft)"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </button>
+                  <ChevronRight class="h-5 w-5 text-gray-400" />
+                </div>
               </div>
             </div>
           </div>
@@ -440,22 +543,35 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
           <p class="mt-1 text-sm text-gray-500">{{ activeDraft.review_notes }}</p>
         </div>
       </div>
-      <template v-if="activeDraft && (activeDraft.status === 'pending_review' || activeDraft.status === 'draft')" #footer>
-        <div class="flex justify-end gap-2 px-4 pb-4">
+      <template v-if="activeDraft" #footer>
+        <div class="flex items-center justify-between gap-2 px-4 pb-4">
           <button
             class="flex items-center gap-1.5 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
-            @click="activeDraft && rejectDraft(activeDraft)"
+            @click="activeDraft && deleteDraft(activeDraft)"
           >
-            <XCircle class="h-4 w-4" />{{ t('growth.reject') }}
+            <Trash2 class="h-4 w-4" />{{ t('common.delete') }}
           </button>
-          <button
-            class="flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-            @click="activeDraft && approveDraft(activeDraft)"
+          <div
+            v-if="activeDraft.status === 'pending_review' || activeDraft.status === 'draft'"
+            class="flex gap-2"
           >
-            <CheckCircle2 class="h-4 w-4" />{{ t('growth.approve') }}
-          </button>
+            <button
+              class="flex items-center gap-1.5 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+              @click="activeDraft && rejectDraft(activeDraft)"
+            >
+              <XCircle class="h-4 w-4" />{{ t('growth.reject') }}
+            </button>
+            <button
+              class="flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+              @click="activeDraft && approveDraft(activeDraft)"
+            >
+              <CheckCircle2 class="h-4 w-4" />{{ t('growth.approve') }}
+            </button>
+          </div>
         </div>
       </template>
     </BaseModal>
+
+    <ConfirmDialog v-model="showConfirm" :message="confirmMessage" @confirm="runConfirm" />
   </div>
 </template>

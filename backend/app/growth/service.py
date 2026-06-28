@@ -28,7 +28,7 @@ from app.growth.trend.discovery import discover_from_rss, discover_from_url, dis
 from app.growth.trend.ranking import rank_topics
 from app.models.integration import FacebookPage
 from app.models.source import RSSSource, Topic, URLSource
-from app.utils.media import save_bytes
+from app.utils.media import remove_upload, save_bytes
 
 log = get_logger("growth.service")
 
@@ -203,13 +203,43 @@ class GrowthService:
     # ------------------------------------------------------------------
 
     def list_drafts(self, page_id: str, status: str | None = None, limit: int = 50) -> list[ContentDraft]:
-        q = self.db.query(ContentDraft).filter_by(page_id=page_id)
+        q = (
+            self.db.query(ContentDraft)
+            .filter_by(page_id=page_id)
+            .filter(ContentDraft.deleted_at.is_(None))
+        )
         if status:
             q = q.filter(ContentDraft.status == status)
         return q.order_by(ContentDraft.created_at.desc()).limit(limit).all()
 
     def get_draft(self, draft_id: str, page_id: str) -> ContentDraft | None:
-        return self.db.query(ContentDraft).filter_by(id=draft_id, page_id=page_id).first()
+        return (
+            self.db.query(ContentDraft)
+            .filter_by(id=draft_id, page_id=page_id)
+            .filter(ContentDraft.deleted_at.is_(None))
+            .first()
+        )
+
+    def delete_draft(self, draft_id: str, page_id: str) -> None:
+        """Soft-delete a draft, pruning its generated image file if present."""
+        draft = self.get_draft(draft_id, page_id)
+        if not draft:
+            raise ValueError(f"Draft {draft_id} not found")
+        if draft.media_url:
+            remove_upload(draft.media_url)
+        draft.deleted_at = datetime.now(timezone.utc)
+        self.db.commit()
+
+    def delete_all_drafts(self, page_id: str) -> int:
+        """Soft-delete every draft on a page; returns the count removed."""
+        drafts = self.list_drafts(page_id, limit=10_000)
+        now = datetime.now(timezone.utc)
+        for draft in drafts:
+            if draft.media_url:
+                remove_upload(draft.media_url)
+            draft.deleted_at = now
+        self.db.commit()
+        return len(drafts)
 
     def update_draft(self, draft_id: str, page_id: str, data: dict) -> ContentDraft:
         draft = self.get_draft(draft_id, page_id)
@@ -232,10 +262,36 @@ class GrowthService:
     # ------------------------------------------------------------------
 
     def list_topics(self, page_id: str, status: str | None = None, limit: int = 50) -> list[TrendTopic]:
-        q = self.db.query(TrendTopic).filter_by(page_id=page_id)
+        q = (
+            self.db.query(TrendTopic)
+            .filter_by(page_id=page_id)
+            .filter(TrendTopic.deleted_at.is_(None))
+        )
         if status:
             q = q.filter(TrendTopic.status == status)
         return q.order_by(TrendTopic.total_score.desc()).limit(limit).all()
+
+    def delete_topic(self, topic_id: str, page_id: str) -> None:
+        """Soft-delete a single trend topic."""
+        topic = (
+            self.db.query(TrendTopic)
+            .filter_by(id=topic_id, page_id=page_id)
+            .filter(TrendTopic.deleted_at.is_(None))
+            .first()
+        )
+        if not topic:
+            raise ValueError(f"Topic {topic_id} not found")
+        topic.deleted_at = datetime.now(timezone.utc)
+        self.db.commit()
+
+    def delete_all_topics(self, page_id: str) -> int:
+        """Soft-delete every trend topic on a page; returns the count removed."""
+        topics = self.list_topics(page_id, limit=10_000)
+        now = datetime.now(timezone.utc)
+        for topic in topics:
+            topic.deleted_at = now
+        self.db.commit()
+        return len(topics)
 
     # ------------------------------------------------------------------
     # Learning

@@ -88,6 +88,7 @@ class ContentPlanner:
             .filter(
                 TrendTopic.page_id == self.page_id,
                 TrendTopic.title == scored.topic.title[:500],
+                TrendTopic.deleted_at.is_(None),
             )
             .first()
         )
