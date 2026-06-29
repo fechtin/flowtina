@@ -526,6 +526,10 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
           alt=""
           class="w-full rounded-xl object-cover bg-gray-100 dark:bg-gray-800"
         />
+        <div v-if="activeDraft.image_prompt">
+          <p class="text-xs font-medium uppercase text-gray-400">{{ t('growth.imagePrompt') }}</p>
+          <p class="mt-1 text-sm italic text-gray-500 dark:text-gray-400">{{ activeDraft.image_prompt }}</p>
+        </div>
         <div>
           <p class="text-xs font-medium uppercase text-gray-400">Hook</p>
           <p class="mt-1 text-gray-900 dark:text-white">{{ activeDraft.hook }}</p>

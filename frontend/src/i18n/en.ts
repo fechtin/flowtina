@@ -388,6 +388,7 @@ export default {
     draftApproved: 'Draft approved',
     draftRejected: 'Draft rejected',
     clearAll: 'Clear all',
+    imagePrompt: 'Image prompt',
     draftDeleted: 'Draft deleted',
     topicDeleted: 'Trend deleted',
     itemsCleared: 'Deleted {count} items',

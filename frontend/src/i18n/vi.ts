@@ -388,6 +388,7 @@ export default {
     draftApproved: 'Đã duyệt bản nháp',
     draftRejected: 'Đã từ chối bản nháp',
     clearAll: 'Xoá tất cả',
+    imagePrompt: 'Prompt ảnh',
     draftDeleted: 'Đã xoá bản nháp',
     topicDeleted: 'Đã xoá xu hướng',
     itemsCleared: 'Đã xoá {count} mục',
