@@ -241,6 +241,32 @@ class GrowthService:
         self.db.commit()
         return len(drafts)
 
+    async def regenerate_image(
+        self, draft_id: str, page_id: str, image_prompt: str | None = None
+    ) -> ContentDraft:
+        """(Re)generate a draft's image, optionally from an edited prompt.
+
+        Unlike auto-generation during draft creation, failures here raise so the
+        caller can surface the error to the user.
+        """
+        draft = self.get_draft(draft_id, page_id)
+        if not draft:
+            raise ValueError(f"Draft {draft_id} not found")
+        if image_prompt is not None:
+            draft.image_prompt = image_prompt.strip()
+        prompt = (draft.image_prompt or "").strip()
+        if not prompt:
+            raise ValueError("An image prompt is required to generate an image")
+
+        image_bytes = await generate_image(prompt)
+        old_media = draft.media_url
+        draft.media_url = save_bytes(image_bytes, page_id, ".jpg")
+        if old_media and old_media != draft.media_url:
+            remove_upload(old_media)
+        self.db.commit()
+        self.db.refresh(draft)
+        return draft
+
     def update_draft(self, draft_id: str, page_id: str, data: dict) -> ContentDraft:
         draft = self.get_draft(draft_id, page_id)
         if not draft:

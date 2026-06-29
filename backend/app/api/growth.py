@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.growth.content.image_generator import ImageGenerationError
 from app.growth.learning.engine import PerformanceMetrics
 from app.growth.schemas import (
     ContentDraftOut,
@@ -19,6 +20,7 @@ from app.growth.schemas import (
     PageGrowthConfigUpdate,
     QuotaStatusOut,
     RecordPerformanceRequest,
+    RegenerateImageRequest,
     RunDiscoveryRequest,
     TrendTopicOut,
 )
@@ -138,6 +140,24 @@ async def generate_draft(
 ):
     project_id = _resolve_project_id(page_id, user, db)
     return await svc.generate_draft(page_id, project_id, body.topic_id, body.content_type)
+
+
+@router.post("/pages/{page_id}/drafts/{draft_id}/image", response_model=ContentDraftOut)
+async def regenerate_draft_image(
+    page_id: str,
+    draft_id: str,
+    body: RegenerateImageRequest,
+    user: User = Depends(get_current_user),
+    svc: GrowthService = Depends(_get_service),
+    db: Session = Depends(get_db),
+):
+    _resolve_project_id(page_id, user, db)
+    try:
+        return await svc.regenerate_image(draft_id, page_id, body.image_prompt)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ImageGenerationError as exc:
+        raise HTTPException(status_code=502, detail=f"Image generation failed: {exc}") from exc
 
 
 @router.get("/pages/{page_id}/drafts", response_model=list[ContentDraftOut])

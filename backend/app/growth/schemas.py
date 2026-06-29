@@ -112,6 +112,10 @@ class GenerateDraftRequest(BaseModel):
     content_type: str = "short_post"
 
 
+class RegenerateImageRequest(BaseModel):
+    image_prompt: str | None = None
+
+
 class RunDiscoveryRequest(BaseModel):
     sources: list[str] | None = None
     max_per_source: int = Field(default=10, ge=1, le=50)

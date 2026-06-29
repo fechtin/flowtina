@@ -39,7 +39,31 @@ const activeDraft = ref<ContentDraft | null>(null)
 
 const apiBase = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 function draftImage(draft: ContentDraft): string | null {
-  return draft.media_url ? `${apiBase}/public/growth/drafts/${draft.id}/image` : null
+  // updated_at busts the browser cache after a regenerate (URL is keyed by id).
+  return draft.media_url
+    ? `${apiBase}/public/growth/drafts/${draft.id}/image?v=${encodeURIComponent(draft.updated_at)}`
+    : null
+}
+
+const editPrompt = ref('')
+const regeneratingImage = ref(false)
+
+async function regenerateImage() {
+  const draft = activeDraft.value
+  if (!draft) return
+  regeneratingImage.value = true
+  try {
+    const updated = await growthService.regenerateImage(selectedPageId.value, draft.id, editPrompt.value)
+    activeDraft.value = updated
+    editPrompt.value = updated.image_prompt
+    const idx = drafts.value.findIndex(d => d.id === updated.id)
+    if (idx !== -1) drafts.value[idx] = updated
+    toast.success(t('growth.imageGenerated'))
+  } catch (err) {
+    toast.error(extractErrorMessage(err))
+  } finally {
+    regeneratingImage.value = false
+  }
 }
 
 const showConfirm = ref(false)
@@ -197,6 +221,7 @@ async function generateDraft(topic: TrendTopic) {
 
 function openDraft(draft: ContentDraft) {
   activeDraft.value = draft
+  editPrompt.value = draft.image_prompt || ''
   showDraftModal.value = true
 }
 
@@ -526,9 +551,24 @@ watch(projectId, () => { selectedPageId.value = ''; loadPages() })
           alt=""
           class="w-full rounded-xl object-cover bg-gray-100 dark:bg-gray-800"
         />
-        <div v-if="activeDraft.image_prompt">
+        <div>
           <p class="text-xs font-medium uppercase text-gray-400">{{ t('growth.imagePrompt') }}</p>
-          <p class="mt-1 text-sm italic text-gray-500 dark:text-gray-400">{{ activeDraft.image_prompt }}</p>
+          <textarea
+            v-model="editPrompt"
+            rows="3"
+            class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            :placeholder="t('growth.imagePromptPlaceholder')"
+          />
+          <button
+            class="mt-2 flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:bg-primary-900/30 dark:text-primary-300"
+            :disabled="regeneratingImage || !editPrompt.trim()"
+            @click="regenerateImage"
+          >
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': regeneratingImage }" />
+            {{ regeneratingImage
+              ? t('growth.generatingImage')
+              : (activeDraft.media_url ? t('growth.regenerateImage') : t('growth.generateImage')) }}
+          </button>
         </div>
         <div>
           <p class="text-xs font-medium uppercase text-gray-400">Hook</p>

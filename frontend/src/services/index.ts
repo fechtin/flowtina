@@ -265,6 +265,8 @@ export const growthService = {
     http.delete<unknown, { deleted: number }>(`/growth/pages/${pageId}/topics`),
   generateDraft: (pageId: string, topicId: string, contentType = 'post') =>
     http.post<unknown, ContentDraft>(`/growth/pages/${pageId}/drafts/generate`, { topic_id: topicId, content_type: contentType }),
+  regenerateImage: (pageId: string, draftId: string, imagePrompt?: string) =>
+    http.post<unknown, ContentDraft>(`/growth/pages/${pageId}/drafts/${draftId}/image`, { image_prompt: imagePrompt ?? null }),
   listDrafts: (pageId: string, status?: string) =>
     http.get<unknown, ContentDraft[]>(`/growth/pages/${pageId}/drafts${status ? `?status=${status}` : ''}`),
   deleteDraft: (pageId: string, draftId: string) =>
