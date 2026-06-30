@@ -196,7 +196,7 @@ class FacebookEngagementUpdate(BaseModel):
     auto_reply_messages: bool | None = None
     auto_reply_ig_comments: bool | None = None
     auto_reply_ig_messages: bool | None = None
-    reply_persona: str | None = Field(default=None, max_length=2000)
+    reply_persona: str | None = Field(default=None, max_length=4000)
     # How often this page is polled, in minutes (floored at the tick granularity).
     engage_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
     # Max comments acted on per page per cycle (like + reply safety cap).

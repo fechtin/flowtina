@@ -403,9 +403,13 @@ async function doDelete() {
           <textarea
             v-model="engageForm.reply_persona"
             rows="6"
+            :maxlength="4000"
             class="input text-sm"
             :placeholder="t('facebook.replyPersonaPlaceholder')"
           />
+          <p class="mt-1 text-right text-xs text-gray-400">
+            {{ (engageForm.reply_persona?.length ?? 0) }}/4000
+          </p>
         </div>
 
         <p
