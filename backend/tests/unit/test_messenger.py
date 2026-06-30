@@ -57,8 +57,12 @@ def _wire(service: MessengerService) -> list:
     ) -> None:
         return None
 
+    async def _fake_profile(user_id: str, token: str, channel: str) -> str | None:
+        return "Mai"  # offline + deterministic name lookup
+
     service._send = _fake_send  # type: ignore[method-assign]
     service._send_action = _fake_action  # type: ignore[method-assign]
+    service._fetch_profile_name = _fake_profile  # type: ignore[method-assign]
     return sent
 
 
@@ -178,6 +182,42 @@ def test_first_contact_uses_plain_prompt_then_memory(db_session, monkeypatch):
     service.enqueue_event(_payload(text="Tell me more", mid="b"))
     asyncio.run(service.process_inbox())
     assert marker in prompts[-1]  # now remembered -> memory-aware prompt
+
+
+def test_profile_name_and_gender_inferred_into_prompt(db_session, monkeypatch):
+    """The follower's name is fetched and gender inferred once, then both are fed
+    into the reply prompt so the bot addresses them with correct honorifics."""
+    monkeypatch.setattr(settings, "messenger_debounce_seconds", 0)
+    _make_page(db_session)
+    service = MessengerService(db_session)
+    _wire(service)  # stubs _fetch_profile_name -> "Mai"
+
+    prompts: list[str] = []
+
+    class _Recording:
+        async def generate(self, project_id: str, prompt: str) -> GenerationResult:
+            prompts.append(prompt)
+            # Answer only the one-word gender classifier with a gender; every
+            # other call is a normal reply.
+            if "Infer the likely gender" in prompt:
+                return GenerationResult(text="female")
+            return GenerationResult(text="Chào Mai, rất vui được trò chuyện!")
+
+    service.ai = _Recording()
+
+    service.enqueue_event(_payload(text="Xin chào", mid="g1"))
+    assert asyncio.run(service.process_inbox()) == 1
+
+    convo = ConversationRepository(db_session).get_by(
+        channel="messenger", external_user_id="psid-1"
+    )
+    assert convo is not None
+    assert convo.user_name == "Mai"
+    assert convo.gender == "female"
+    # The reply prompt carries the name + female addressing guidance.
+    reply_prompt = prompts[-1]
+    assert "Mai" in reply_prompt
+    assert "female" in reply_prompt
 
 
 def test_instagram_dm_replies_via_send_api(db_session, monkeypatch):

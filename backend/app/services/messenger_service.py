@@ -23,6 +23,7 @@ from app.models.memory import CHANNEL_IG_MESSAGE, CHANNEL_MESSENGER, Conversatio
 from app.prompts.defaults import (
     DEFAULT_DM_REPLY_PROMPT,
     DEFAULT_DM_REPLY_WITH_MEMORY_PROMPT,
+    DEFAULT_GENDER_INFERENCE_PROMPT,
 )
 from app.prompts.engine import prompt_engine
 from app.repositories.repositories import (
@@ -242,7 +243,7 @@ class MessengerService:
             await self._send_action(url, sender_id, "mark_seen", token)
             await self._send_action(url, sender_id, "typing_on", token)
             reply, conversation = await self._build_reply(
-                page, sender_id, combined, channel
+                page, sender_id, combined, channel, token
             )
             if not reply:
                 # A blank AI reply (a transient model glitch or a rate-limited
@@ -283,14 +284,22 @@ class MessengerService:
     # --- AI reply ---
 
     async def _build_reply(
-        self, page: FacebookPage, sender_id: str, text: str, channel: str
+        self, page: FacebookPage, sender_id: str, text: str, channel: str, token: str
     ) -> tuple[str, Conversation | None]:
         persona = (
             f"Voice and guidance: {page.reply_persona}" if page.reply_persona else ""
         )
         if self.memory is None:
+            # No memory store to persist to: still personalize this one reply with
+            # the follower's real name when the Graph API exposes it.
+            name = await self._fetch_profile_name(sender_id, token, channel)
             prompt = prompt_engine.render(
-                DEFAULT_DM_REPLY_PROMPT, {"persona": persona, "comment": text[:1500]}
+                DEFAULT_DM_REPLY_PROMPT,
+                {
+                    "persona": persona,
+                    "profile_hint": self._profile_hint(name, None, with_name=True),
+                    "comment": text[:1500],
+                },
             )
             result = await self.ai.generate(page.project_id, prompt)
             return self._clean(result.text), None
@@ -301,12 +310,23 @@ class MessengerService:
             channel=channel,
             external_user_id=sender_id,
         )
+        # Learn the follower's name + gender once so every reply addresses them
+        # correctly (e.g. Vietnamese anh/chị). Best-effort; never blocks the reply.
+        await self._ensure_profile(conversation, sender_id, token, channel, text)
+
         # First contact: use the plain prompt so the reply does not pretend to
         # remember a follower we have never talked to. The exchange is still
         # recorded (conversation returned) so memory builds up for next time.
         if not self.memory.has_context(conversation):
             prompt = prompt_engine.render(
-                DEFAULT_DM_REPLY_PROMPT, {"persona": persona, "comment": text[:1500]}
+                DEFAULT_DM_REPLY_PROMPT,
+                {
+                    "persona": persona,
+                    "profile_hint": self._profile_hint(
+                        conversation.user_name, conversation.gender, with_name=True
+                    ),
+                    "comment": text[:1500],
+                },
             )
             result = await self.ai.generate(page.project_id, prompt)
             return self._clean(result.text), conversation
@@ -317,6 +337,9 @@ class MessengerService:
             {
                 "persona": persona,
                 "user_name": conversation.user_name or "this follower",
+                "profile_hint": self._profile_hint(
+                    conversation.user_name, conversation.gender, with_name=False
+                ),
                 "memory_context": context["memory_context"],
                 "history": context["history"],
                 "comment": text[:1500],
@@ -324,6 +347,107 @@ class MessengerService:
         )
         result = await self.ai.generate(page.project_id, prompt)
         return self._clean(result.text), conversation
+
+    # --- follower profile (name + gender for correct addressing) ---
+
+    async def _ensure_profile(
+        self,
+        conversation: Conversation,
+        user_id: str,
+        token: str,
+        channel: str,
+        text: str,
+    ) -> None:
+        """Learn the follower's name and gender once; persist on the conversation.
+
+        Best-effort: any Graph/AI failure leaves the field unset and the reply
+        still goes out. Skipped entirely once both are already known.
+        """
+        if conversation.user_name and conversation.gender:
+            return
+        if not conversation.user_name:
+            name = await self._fetch_profile_name(user_id, token, channel)
+            if name:
+                conversation.user_name = name[:255]
+        if not conversation.gender and conversation.user_name:
+            gender = await self._infer_gender(
+                conversation.project_id, conversation.user_name, text
+            )
+            if gender:
+                conversation.gender = gender
+        self.db.flush()
+
+    async def _fetch_profile_name(
+        self, user_id: str, token: str, channel: str
+    ) -> str | None:
+        """Resolve a follower's display name via the Graph user-profile endpoint.
+
+        Messenger exposes ``first_name``/``last_name``; Instagram exposes ``name``.
+        A page admin's own app (development mode) can read this for the pages they
+        manage without extra App Review. Returns None on any error.
+        """
+        is_instagram = channel == CHANNEL_IG_MESSAGE
+        fields = "name" if is_instagram else "first_name,last_name"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(
+                    f"{GRAPH_API}/{user_id}",
+                    params={"fields": fields, "access_token": token},
+                )
+            if resp.status_code >= 400:
+                log.debug(
+                    f"profile fetch HTTP {resp.status_code} for {user_id}: "
+                    f"{resp.text[:200]}"
+                )
+                return None
+            data = resp.json()
+        except Exception as exc:  # noqa: BLE001 - personalization is best-effort
+            log.debug(f"profile fetch failed for {user_id}: {exc}")
+            return None
+        if is_instagram:
+            return (data.get("name") or "").strip() or None
+        name = " ".join(
+            part for part in (data.get("first_name"), data.get("last_name")) if part
+        ).strip()
+        return name or None
+
+    async def _infer_gender(self, project_id: str, name: str, text: str) -> str | None:
+        """Infer ``"male"``/``"female"`` from the name + a sample message, or None."""
+        prompt = prompt_engine.render(
+            DEFAULT_GENDER_INFERENCE_PROMPT,
+            {"name": name, "message": (text or "")[:500]},
+        )
+        try:
+            result = await self.ai.generate(project_id, prompt)
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            log.debug(f"gender inference failed for {name}: {exc}")
+            return None
+        answer = (result.text or "").strip().lower()
+        # "female" contains "male", so test the more specific token first.
+        if "female" in answer:
+            return "female"
+        if "male" in answer:
+            return "male"
+        return None
+
+    @staticmethod
+    def _profile_hint(name: str | None, gender: str | None, *, with_name: bool) -> str:
+        """Build an addressing instruction from the follower's name and gender."""
+        parts: list[str] = []
+        if with_name and name:
+            parts.append(f"The follower's name is {name}.")
+        if gender == "male":
+            parts.append("They appear to be male.")
+        elif gender == "female":
+            parts.append("They appear to be female.")
+        if not parts:
+            return ""
+        parts.append(
+            "Address them naturally and consistently in their own language, using "
+            "the correct name and gendered honorifics where the language has them "
+            "(for Vietnamese: anh for a man, chị for a woman)."
+        )
+        return " ".join(parts)
 
     @staticmethod
     def _clean(text: str) -> str:

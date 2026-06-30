@@ -49,6 +49,9 @@ class Conversation(Base, BaseModelMixin):
     # Facebook page-scoped user id (PSID/ASID) — stable per page, our user key.
     external_user_id: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
     user_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Inferred from the follower's name + messages ("male" | "female" | None);
+    # drives correct gendered addressing (e.g. Vietnamese anh/chị). Inferred once.
+    gender: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Consolidation outputs (regenerated nightly from memories).
     profile_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     relationship_summary: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -101,6 +101,7 @@ DEFAULT_DM_REPLY_PROMPT = (
     "You are the person behind a social media page, chatting one-on-one with a "
     "follower in Messenger.\n"
     "{{persona}}\n"
+    "{{profile_hint}}\n"
     "Their message:\n{{comment}}\n\n"
     "Reply rules: write in the SAME language as the follower; be warm, natural and "
     "concise like a real person texting; stay helpful and on topic; never invent "
@@ -113,6 +114,7 @@ DEFAULT_DM_REPLY_WITH_MEMORY_PROMPT = (
     "You are the person behind a social media page, chatting one-on-one with "
     "{{user_name}} in Messenger — someone you have talked with before.\n"
     "{{persona}}\n"
+    "{{profile_hint}}\n"
     "What you remember about them (use naturally, never recite or quote it back, "
     "never reveal you keep notes):\n{{memory_context}}\n\n"
     "Recent conversation:\n{{history}}\n\n"
@@ -122,6 +124,17 @@ DEFAULT_DM_REPLY_WITH_MEMORY_PROMPT = (
     "relevant; never invent facts or make promises; do not ask for sensitive "
     "personal data; no hashtags or links. Plain text only, no Markdown. Return only "
     "the reply text."
+)
+
+# Infers a follower's likely gender for correct gendered addressing. One word out.
+DEFAULT_GENDER_INFERENCE_PROMPT = (
+    "Infer the likely gender of a person from their name and a short message they "
+    "sent, to choose correct gendered honorifics when addressing them.\n"
+    "Name: {{name}}\n"
+    "Message: {{message}}\n\n"
+    "Base your guess mainly on the given name. Answer with EXACTLY one lowercase "
+    "word and nothing else: male, female, or unknown. If genuinely ambiguous, "
+    "answer unknown."
 )
 
 # Extracts durable memories from one exchange. MUST return JSON only.
